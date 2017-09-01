@@ -22,10 +22,9 @@ void launch();
 static void checkDeadlock();
 int isInKernelMode();
 int isInterruptEnabled();
-void enableInterrupts();
-void disableInterrupts();
-void enterKernelMode();
-void enterUserMode();
+int enableInterrupts();
+int enterKernelMode();
+int enterUserMode();
 
 
 
@@ -297,6 +296,21 @@ void disableInterrupts()
 		// turn the interrupts OFF iff we are in kernel mode
 		// if not in kernel mode, print an error message and
 		// halt USLOSS
+	if (isInKernelMode()) {
+		unsigned int psr = USLOSS_PsrGet();
+		unsigned int op = 0xfffffffd;
+		int result = USLOSS_PsrSet(psr & op);
+		if (result == USLOSS_ERR_INVALID_PSR) {
+			fprintf(stderr, "Failed to set PSR to kernel mode.");
+			USLOSS_Halt(0);
+		}
+	}
+	else {
+		fprintf(stderr, "Failed to disable interrupts as not in kernel mode.");
+		USLOSS_Halt(0);
+	}
+
+	// TODO: May need more than just switching the bit?
 
 } /* disableInterrupts */
 
@@ -309,18 +323,30 @@ int isInKernelMode() {
 	return psr & op;
 }
 
-void enterKernelMode() {
+int enterKernelMode() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0x1;
-	USLOSS_PsrSet(psr | op);
+	int result = USLOSS_PsrSet(psr | op);
+	if (result == USLOSS_ERR_INVALID_PSR) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 
 	// TODO: May need more than just switching the bit?
 }
 
-void enterUserMode() {
+int enterUserMode() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0xfffffffe;
-	USLOSS_PsrSet(psr & op);
+	int result = USLOSS_PsrSet(psr & op);
+	if (result == USLOSS_ERR_INVALID_PSR) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 
 	// TODO: May need more than just switching the bit?
 }
@@ -334,18 +360,16 @@ int isInterruptEnabled() {
 	return (psr & op) >> 1;
 }
 
-void enableInterrupts() {
+int enableInterrupts() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0x2;
-	USLOSS_PsrSet(psr & op);
-
-	// TODO: May need more than just switching the bit?
-}
-
-void disableInterrupts() {
-	unsigned int psr = USLOSS_PsrGet();
-	unsigned int op = 0xfffffffd;
-	USLOSS_PsrSet(psr & op);
+	int result = USLOSS_PsrSet(psr & op);
+	if (result == USLOSS_ERR_INVALID_PSR) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 
 	// TODO: May need more than just switching the bit?
 }
