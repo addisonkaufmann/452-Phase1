@@ -22,12 +22,9 @@ void launch();
 static void checkDeadlock();
 int isInKernelMode();
 int isInterruptEnabled();
-void enableInterrupts();
-void disableInterrupts();
-void enterKernelMode();
-void enterUserMode();
-unsigned int getNextPid();
-int isProcessTableFull();
+int enableInterrupts();
+int enterKernelMode();
+int enterUserMode();
 
 
 
@@ -139,7 +136,6 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// test if in kernel mode; halt if in user mode 
 		if ( !isInKernelMode() ) {
-			USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
 			USLOSS_Halt(0);
 		}
 
@@ -151,18 +147,10 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// Return if stack size is too small
 		if ( stacksize < USLOSS_MIN_STACK ){
-			USLOSS_Console("fork1(): Requested Stack size too small.\n");
 			return -1;
 		}
 
 		// Is there room in the process table? What is the next PID?
-		if (isProcessTableFull()){
-			USLOSS_Console("fork1(): Process Table is full.\n");
-			return -1;
-		}
-
-		int pid = getNextPid();
-
 
 		// fill-in entry in process table */
 		if ( strlen(name) >= (MAXNAME - 1) ) {
@@ -314,6 +302,21 @@ void disableInterrupts()
 		// turn the interrupts OFF iff we are in kernel mode
 		// if not in kernel mode, print an error message and
 		// halt USLOSS
+	if (isInKernelMode()) {
+		unsigned int psr = USLOSS_PsrGet();
+		unsigned int op = 0xfffffffd;
+		int result = USLOSS_PsrSet(psr & op);
+		if (result == USLOSS_ERR_INVALID_PSR) {
+			fprintf(stderr, "Failed to set PSR to kernel mode.");
+			USLOSS_Halt(0);
+		}
+	}
+	else {
+		fprintf(stderr, "Failed to disable interrupts as not in kernel mode.");
+		USLOSS_Halt(0);
+	}
+
+	// TODO: May need more than just switching the bit?
 
 } /* disableInterrupts */
 
@@ -326,18 +329,30 @@ int isInKernelMode() {
 	return psr & op;
 }
 
-void enterKernelMode() {
+int enterKernelMode() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0x1;
-	USLOSS_PsrSet(psr | op);
+	int result = USLOSS_PsrSet(psr | op);
+	if (result == USLOSS_ERR_INVALID_PSR) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 
 	// TODO: May need more than just switching the bit?
 }
 
-void enterUserMode() {
+int enterUserMode() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0xfffffffe;
-	USLOSS_PsrSet(psr & op);
+	int result = USLOSS_PsrSet(psr & op);
+	if (result == USLOSS_ERR_INVALID_PSR) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 
 	// TODO: May need more than just switching the bit?
 }
@@ -351,35 +366,16 @@ int isInterruptEnabled() {
 	return (psr & op) >> 1;
 }
 
-void enableInterrupts() {
+int enableInterrupts() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0x2;
-	USLOSS_PsrSet(psr & op);
+	int result = USLOSS_PsrSet(psr & op);
+	if (result == USLOSS_ERR_INVALID_PSR) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 
 	// TODO: May need more than just switching the bit?
-}
-
-void disableInterrupts() {
-	unsigned int psr = USLOSS_PsrGet();
-	unsigned int op = 0xfffffffd;
-	USLOSS_PsrSet(psr & op);
-
-	// TODO: May need more than just switching the bit?
-}
-
-int isProcessTableFull(){
-	for (int i = 0; i < MAXPROC; i++){
-		if (ProcTable[i].status == EMPTY){
-			return 0;
-		}
-	}
-	return 1;
-}
-
-unsigned int getNextPid(){
-
-	while (ProcTable[nextPid % MAXPROC].status == EMPTY){
-		nextPid++;
-	}
-	return nextPid;
 }
