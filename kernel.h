@@ -17,7 +17,7 @@ struct procStruct {
    int (* startFunc) (char *);   /* function where process begins -- launch */
    char           *stack;
    unsigned int    stackSize;
-   int             status;        /* READY, BLOCKED, QUIT, etc. */
+   int             status;        /* READY, BLOCKED, QUIT, EMPTY etc. */
    /* other fields as needed... */
 };
 
@@ -40,4 +40,8 @@ union psrValues {
 #define MAXPRIORITY 1
 #define SENTINELPID 1
 #define SENTINELPRIORITY (MINPRIORITY + 1)
+#define EMPTY 0
+#define READY 1
+#define BLOCKED 2
+#define QUIT 3
 
