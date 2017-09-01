@@ -25,6 +25,8 @@ int isInterruptEnabled();
 int enableInterrupts();
 int enterKernelMode();
 int enterUserMode();
+unsigned int getNextPid();
+int isProcessTableFull();
 
 
 
@@ -136,6 +138,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// test if in kernel mode; halt if in user mode 
 		if ( !isInKernelMode() ) {
+			USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
 			USLOSS_Halt(0);
 		}
 
@@ -147,10 +150,18 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// Return if stack size is too small
 		if ( stacksize < USLOSS_MIN_STACK ){
+			USLOSS_Console("fork1(): Requested Stack size too small.\n");
 			return -1;
 		}
 
 		// Is there room in the process table? What is the next PID?
+		if (isProcessTableFull()){
+			USLOSS_Console("fork1(): Process Table is full.\n");
+			return -1;
+		}
+
+		int pid = getNextPid();
+
 
 		// fill-in entry in process table */
 		if ( strlen(name) >= (MAXNAME - 1) ) {
@@ -353,7 +364,6 @@ int enterUserMode() {
 	else {
 		return 0;
 	}
-
 	// TODO: May need more than just switching the bit?
 }
 
@@ -379,3 +389,22 @@ int enableInterrupts() {
 
 	// TODO: May need more than just switching the bit?
 }
+
+
+int isProcessTableFull(){
+	for (int i = 0; i < MAXPROC; i++){
+		if (ProcTable[i].status == EMPTY){
+			return 0;
+		}
+	}
+	return 1;
+}
+
+unsigned int getNextPid(){
+
+	while (ProcTable[nextPid % MAXPROC].status == EMPTY){
+		nextPid++;
+	}
+	return nextPid;
+}
+
