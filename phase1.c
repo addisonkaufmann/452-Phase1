@@ -210,7 +210,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// More stuff to do here...
 
-		return pid;  // -1 is not correct! Here to prevent warning.
+		return pid;
 } /* fork1 */
 
 /* ------------------------------------------------------------------------
@@ -229,6 +229,10 @@ void launch()
 				USLOSS_Console("launch(): started\n");
 
 		// Enable interrupts
+		result = enableInterrupts();
+		if (result == -1) {
+			fprintf(stderr, "launch(): failed to enable interrupts.\n");
+		}
 
 		// Call the function passed to fork1, and capture its return value
 		result = Current->startFunc(Current->startArg);
