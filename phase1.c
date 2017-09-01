@@ -31,7 +31,9 @@ int debugflag = 1;
 procStruct ProcTable[MAXPROC];
 
 // Process lists
-static procPtr ReadyList;
+// static procPtr ReadyList;  
+
+static procPtr ReadyLists[6]; //linked list (queue) for each priority
 
 // current process ID
 procPtr Current;
@@ -60,9 +62,9 @@ void startup(int argc, char *argv[])
 		// Initialize the Ready list, etc.
 		if (DEBUG && debugflag)
 				USLOSS_Console("startup(): initializing the Ready list\n");
-		ReadyList = NULL;
+		ReadyLists[0] = NULL;
 
-		// Initialize the clock interrupt handler
+		// Initialize the clock interrupt handler -- ignoring for now
 
 		// startup a sentinel process
 		if (DEBUG && debugflag)
