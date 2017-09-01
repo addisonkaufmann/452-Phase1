@@ -424,7 +424,7 @@ int isProcessTableFull(){
 	Scans for available pid
 */
 unsigned int getNextPid(){
-	while (ProcTable[nextPid % MAXPROC].status == EMPTY){
+	while (ProcTable[nextPid % MAXPROC].status != EMPTY){
 		nextPid++;
 	}
 	return nextPid;
