@@ -147,10 +147,21 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 			USLOSS_Halt(1);
 		}
 
+		if (name == NULL || startFunc == NULL) {
+			fprintf(stderr, "fork1(): Name and/or start function cannot be null.\n");
+			return -1;
+		}
+
 		// test if trying to apply sentinel priority to non-sentinel process
 		if (strcmp(name, "sentinel") != 0 && priority == SENTINELPRIORITY) {
-			fprintf(stderr, "Cannot assign sentinel prority to process other than the sentinel.");
+			fprintf(stderr, "fork1(): Cannot assign sentinel prority to process other than the sentinel. Halting...\n");
 			USLOSS_Halt(1);
+		}
+
+		// check for priority out of range
+		if (priority > SENTINELPRIORITY || priority < MAXPRIORITY) {
+			fprintf(stderr, "fork1(): Priority out of range.\n");
+			return -1;
 		}
 
 		// Return if stack size is too small
@@ -199,7 +210,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// More stuff to do here...
 
-		return -1;  // -1 is not correct! Here to prevent warning.
+		return pid;  // -1 is not correct! Here to prevent warning.
 } /* fork1 */
 
 /* ------------------------------------------------------------------------
