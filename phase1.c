@@ -139,13 +139,13 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		// test if in kernel mode; halt if in user mode 
 		if ( !isInKernelMode() ) {
 			USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
-			USLOSS_Halt(0);
+			USLOSS_Halt(1);
 		}
 
 		// test if trying to apply sentinel priority to non-sentinel process
 		if (strcmp(name, "sentinel") != 0 && priority == SENTINELPRIORITY) {
 			fprintf(stderr, "Cannot assign sentinel prority to process other than the sentinel.");
-			USLOSS_Halt(0);
+			USLOSS_Halt(1);
 		}
 
 		// Return if stack size is too small
