@@ -139,6 +139,12 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 			USLOSS_Halt(0);
 		}
 
+		// test if trying to apply sentinel priority to non-sentinel process
+		if (strcmp(name, "sentinel") != 0 && priority == SENTINELPRIORITY) {
+			fprintf(stderr, "Cannot assign sentinel prority to process other than the sentinel.");
+			USLOSS_Halt(0);
+		}
+
 		// Return if stack size is too small
 		if ( stacksize < USLOSS_MIN_STACK ){
 			return -1;
