@@ -27,6 +27,8 @@ int enterKernelMode();
 int enterUserMode();
 unsigned int getNextPid();
 int isProcessTableFull();
+void initProcessTable();
+void initReadyLists();
 
 
 
@@ -41,7 +43,7 @@ procStruct ProcTable[MAXPROC];
 // Process lists
 // static procPtr ReadyList;  
 
-static procPtr ReadyLists[6]; //linked list (queue) for each priority
+static procPtr ReadyLists[SENTINELPRIORITY]; //linked list (queue) for each priority
 
 // current process ID
 procPtr Current;
@@ -66,11 +68,13 @@ void startup(int argc, char *argv[])
 		/* initialize the process table */
 		if (DEBUG && debugflag)
 				USLOSS_Console("startup(): initializing process table, ProcTable[]\n");
+		initProcessTable();
+
 
 		// Initialize the Ready list, etc.
 		if (DEBUG && debugflag)
 				USLOSS_Console("startup(): initializing the Ready list\n");
-		ReadyLists[0] = NULL;
+		initReadyLists();
 
 		// Initialize the clock interrupt handler -- ignoring for now
 
@@ -102,6 +106,7 @@ void startup(int argc, char *argv[])
 
 		return;
 } /* startup */
+
 
 /* ------------------------------------------------------------------------
 	 Name - finish
@@ -151,7 +156,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		// Return if stack size is too small
 		if ( stacksize < USLOSS_MIN_STACK ){
 			USLOSS_Console("fork1(): Requested Stack size too small.\n");
-			return -1;
+			return -2;
 		}
 
 		// Is there room in the process table? What is the next PID?
@@ -168,6 +173,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 				USLOSS_Console("fork1(): Process name is too long.  Halting...\n");
 				USLOSS_Halt(1);
 		}
+
 		strcpy(ProcTable[procSlot].name, name);
 		ProcTable[procSlot].startFunc = startFunc;
 		if ( arg == NULL )
@@ -390,6 +396,9 @@ int enableInterrupts() {
 	// TODO: May need more than just switching the bit?
 }
 
+/*
+	Checks if process table is full
+*/
 
 int isProcessTableFull(){
 	for (int i = 0; i < MAXPROC; i++){
@@ -400,11 +409,23 @@ int isProcessTableFull(){
 	return 1;
 }
 
+/*
+	Scans for available pid
+*/
 unsigned int getNextPid(){
-
 	while (ProcTable[nextPid % MAXPROC].status == EMPTY){
 		nextPid++;
 	}
 	return nextPid;
+}
+
+void initProcessTable(){
+	for (int i = 0; i < MAXPROC; i++){
+		ProcTable[i].status = EMPTY;
+	}
+}
+
+void initReadyLists(){
+	//do something maybe
 }
 
