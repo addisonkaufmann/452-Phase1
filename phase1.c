@@ -20,6 +20,13 @@ extern int start1 (char *);
 void dispatcher(void);
 void launch();
 static void checkDeadlock();
+int isInKernelMode();
+int isInterruptEnabled();
+void enableInterrupts();
+void disableInterrupts();
+void enterKernelMode();
+void enterUserMode();
+
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -286,3 +293,53 @@ void disableInterrupts()
 		// halt USLOSS
 
 } /* disableInterrupts */
+
+/*
+ * Returns 1 if in kernel mode, else 0.
+ */
+int isInKernelMode() {
+	unsigned int psr = USLOSS_PsrGet();
+	unsigned int op = 0x1;
+	return psr & op;
+}
+
+void enterKernelMode() {
+	unsigned int psr = USLOSS_PsrGet();
+	unsigned int op = 0x1;
+	USLOSS_PsrSet(psr | op);
+
+	// TODO: May need more than just switching the bit?
+}
+
+void enterUserMode() {
+	unsigned int psr = USLOSS_PsrGet();
+	unsigned int op = 0xfffffffe;
+	USLOSS_PsrSet(psr & op);
+
+	// TODO: May need more than just switching the bit?
+}
+
+/*
+ * Returns 1 if interrupts are enabled, else 0.
+ */
+int isInterruptEnabled() {
+	unsigned int psr = USLOSS_PsrGet();
+	unsigned int op = 0x2;
+	return (psr & op) >> 1;
+}
+
+void enableInterrupts() {
+	unsigned int psr = USLOSS_PsrGet();
+	unsigned int op = 0x2;
+	USLOSS_PsrSet(psr & op);
+
+	// TODO: May need more than just switching the bit?
+}
+
+void disableInterrupts() {
+	unsigned int psr = USLOSS_PsrGet();
+	unsigned int op = 0xfffffffd;
+	USLOSS_PsrSet(psr & op);
+
+	// TODO: May need more than just switching the bit?
+}
