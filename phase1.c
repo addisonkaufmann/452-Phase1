@@ -46,7 +46,7 @@ procStruct ProcTable[MAXPROC];
 static procPtr ReadyLists[SENTINELPRIORITY]; //linked list (queue) for each priority
 
 // current process ID
-procPtr Current;
+procPtr Current = NULL;
 
 // the next pid to be assigned
 unsigned int nextPid = SENTINELPID;
@@ -177,7 +177,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		}
 
 		int pid = getNextPid();
-
+		procSlot = (pid - 1) % MAXPROC;
 
 		// fill-in entry in process table */
 		if ( strlen(name) >= (MAXNAME - 1) ) {
@@ -208,7 +208,18 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		// for future phase(s)
 		p1_fork(ProcTable[procSlot].pid);
 
+		if (Current != NULL) {
+			procPtr temp = Current->childProcPtr;
+			while (temp != NULL) {
+				temp = temp->nextSiblingPtr;
+			}
+			temp = &ProcTable[procSlot];
+		}
+
 		// More stuff to do here...
+		dispatcher();
+
+		
 
 		return pid;
 } /* fork1 */
@@ -428,7 +439,7 @@ int isProcessTableFull(){
 	Scans for available pid
 */
 unsigned int getNextPid(){
-	while (ProcTable[nextPid % MAXPROC].status != EMPTY){
+	while (ProcTable[(nextPid - 1) % MAXPROC].status != EMPTY){
 		nextPid++;
 	}
 	return nextPid;
