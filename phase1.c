@@ -217,7 +217,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		}
 
 		// More stuff to do here...
-		dispatcher();
+		dispatcher(); // TODO: DO NOT call dispatcher when creating sentinel
 
 		
 
