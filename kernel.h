@@ -9,6 +9,9 @@ struct procStruct {
    procPtr         nextProcPtr;
    procPtr         childProcPtr;
    procPtr         nextSiblingPtr;
+   procPtr         quitList;
+   procPtr         quitNext;
+   int             quitStatus;
    char            name[MAXNAME];     /* process's name */
    char            startArg[MAXARG];  /* args passed to process */
    USLOSS_Context  state;             /* current context for process */
@@ -18,6 +21,8 @@ struct procStruct {
    char           *stack;
    unsigned int    stackSize;
    int             status;        /* READY, BLOCKED, QUIT, EMPTY etc. */
+   int             numKids;
+   int             numJoins;
    /* other fields as needed... */
 };
 
