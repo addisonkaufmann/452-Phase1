@@ -23,12 +23,14 @@ static void checkDeadlock();
 int isInKernelMode();
 int isInterruptEnabled();
 int enableInterrupts();
+void disableInterrupts();
 int enterKernelMode();
 int enterUserMode();
 unsigned int getNextPid();
 int isProcessTableFull();
 void initProcessTable();
 void initReadyLists();
+void addProcToReadyLists();
 
 
 
@@ -178,6 +180,8 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		int pid = getNextPid();
 		procSlot = (pid - 1) % MAXPROC;
+		USLOSS_Console("fork1(): %s's pid is %d\n", name, pid);
+
 
 		// fill-in entry in process table */
 		if ( strlen(name) >= (MAXNAME - 1) ) {
@@ -186,7 +190,12 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		}
 
 		strcpy(ProcTable[procSlot].name, name);
+		ProcTable[procSlot].pid = pid;
 		ProcTable[procSlot].startFunc = startFunc;
+		ProcTable[procSlot].stack = (char *) malloc(stacksize * sizeof(char));
+		ProcTable[procSlot].stackSize = stacksize;
+		ProcTable[procSlot].status = READY;
+		// set the status to ready?
 		if ( arg == NULL )
 				ProcTable[procSlot].startArg[0] = '\0';
 		else if ( strlen(arg) >= (MAXARG - 1) ) {
@@ -196,8 +205,15 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		else
 				strcpy(ProcTable[procSlot].startArg, arg);
 
+		//add new process to readylist
+
+
 		// Initialize context for this process, but use launch function pointer for
 		// the initial value of the process's program counter (PC)
+
+		//must enable interrupts before running contextinit
+		enableInterrupts();
+
 
 		USLOSS_ContextInit(&(ProcTable[procSlot].state),
 											 ProcTable[procSlot].stack,
@@ -205,21 +221,30 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 											 NULL,
 											 launch);
 
+		disableInterrupts();
+
 		// for future phase(s)
 		p1_fork(ProcTable[procSlot].pid);
 
+		//append this new process to current's list of children
 		if (Current != NULL) {
 			procPtr temp = Current->childProcPtr;
 			while (temp != NULL) {
 				temp = temp->nextSiblingPtr;
 			}
-			temp = &ProcTable[procSlot];
+			temp = &ProcTable[procSlot]; //TODO: fix this, it's bunk
 		}
 
-		// More stuff to do here...
-		dispatcher(); // TODO: DO NOT call dispatcher when creating sentinel
 
-		
+
+		// More stuff to do here...
+		addProcToReadyLists(procSlot, priority);
+
+		if (0 != strcmp(ProcTable[procSlot].name, "sentinel")) { // do not call dispatcher when creating sentinel
+			USLOSS_Console("fork1(): calling dispatcher()\n");
+			dispatcher();
+		}
+
 
 		return pid;
 } /* fork1 */
@@ -301,9 +326,33 @@ void quit(int status)
 	 ----------------------------------------------------------------------- */
 void dispatcher(void)
 {
+		//check that sentinel exists
+		if (ReadyLists[SENTINELPRIORITY - 1] == NULL){
+			USLOSS_Console("dispatcher(): Sentinel does not exist in ready list\n");
+			USLOSS_Halt(1);
+		}
+
 		procPtr nextProcess = NULL;
 
-		p1_switch(Current->pid, nextProcess->pid);
+		for( int i = 0; i < SENTINELPRIORITY; i++){
+			if (ReadyLists[i] != NULL){
+				USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", ReadyLists[i]->name, ReadyLists[i]->pid, i+1);
+				nextProcess = ReadyLists[i];
+				break;
+			}
+		}
+		if (Current == NULL){ //possibly
+			p1_switch(-1, nextProcess->pid);
+		} else {
+			p1_switch(Current->pid, nextProcess->pid);
+		}
+
+		Current = nextProcess;
+		USLOSS_Halt(0); //TODO: remove this line
+
+		launch();
+
+
 } /* dispatcher */
 
 
@@ -455,3 +504,19 @@ void initReadyLists(){
 	//do something maybe
 }
 
+void addProcToReadyLists(int procSlot, int priority){
+	int rl_index = priority - 1;
+
+	if (ReadyLists[rl_index] == NULL){
+		ReadyLists[rl_index] = &ProcTable[procSlot];
+	} else {
+		procPtr fore = ReadyLists[rl_index];
+		procPtr aft = NULL;
+		while (fore != NULL){
+			aft = fore;
+			fore = fore->nextProcPtr;
+		}
+		aft->nextProcPtr = &ProcTable[procSlot];
+	}
+	USLOSS_Console("fork1(): adding %s to readylist at priority %d\n", ReadyLists[rl_index]->name, priority);
+}
