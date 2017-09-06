@@ -178,6 +178,8 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 			return -1;
 		}
 
+		disableInterrupts();
+
 		int pid = getNextPid();
 		procSlot = (pid - 1) % MAXPROC;
 		USLOSS_Console("fork1(): %s's pid is %d\n", name, pid);
@@ -196,14 +198,16 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		ProcTable[procSlot].stackSize = stacksize;
 		ProcTable[procSlot].status = READY;
 		// set the status to ready?
-		if ( arg == NULL )
+		if ( arg == NULL ) {
 				ProcTable[procSlot].startArg[0] = '\0';
+		}
 		else if ( strlen(arg) >= (MAXARG - 1) ) {
 				USLOSS_Console("fork1(): argument too long.  Halting...\n");
 				USLOSS_Halt(1);
 		}
-		else
+		else {
 				strcpy(ProcTable[procSlot].startArg, arg);
+		}
 
 		//add new process to readylist
 
@@ -228,13 +232,20 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		//append this new process to current's list of children
 		if (Current != NULL) {
-			procPtr temp = Current->childProcPtr;
-			while (temp != NULL) {
-				temp = temp->nextSiblingPtr;
+			if (Current->childProcPtr == NULL) {
+				Current->childProcPtr = &ProcTable[procSlot];
 			}
-			temp = &ProcTable[procSlot]; //TODO: fix this, it's bunk
+			else {
+				procPtr prev = NULL;
+				procPtr curr = Current->childProcPtr;
+				while (curr != NULL) {
+					prev = curr;
+					curr = curr->nextSiblingPtr;
+				}
+				prev->nextSiblingPtr = &ProcTable[procSlot];
+			}
+			Current->numKids++;
 		}
-
 
 
 		// More stuff to do here...
@@ -245,7 +256,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 			dispatcher();
 		}
 
-
+		enableInterrupts();
 		return pid;
 } /* fork1 */
 
@@ -295,7 +306,28 @@ void launch()
 	 ------------------------------------------------------------------------ */
 int join(int *status)
 {
-		return -1;  // -1 is not correct! Here to prevent warning.
+	if (Current->childProcPtr == NULL) { 
+		return -2; // has no children
+	}
+
+	if (Current->numJoins == Current->numKids) {
+		return -2; // already joined for each child
+	}
+
+	if (Current->quitList != NULL) { // child has already quit
+		procPtr quitChild = Current->quitList;
+		Current->quitList = Current->quitList->quitNext;
+		*status = quitChild->quitStatus;
+		Current->numJoins++;
+		return quitChild->pid;
+
+	}
+	else { 
+		Current->numJoins++;
+		//gotta wait
+	}
+
+	return -1;  // if the process was zapped while waiting for a child to quit.
 } /* join */
 
 
