@@ -244,6 +244,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 				}
 				prev->nextSiblingPtr = &ProcTable[procSlot];
 			}
+			ProcTable[procSlot].parentPtr = Current;
 			Current->numKids++;
 		}
 
@@ -307,22 +308,26 @@ void launch()
 int join(int *status)
 {
 	if (Current->childProcPtr == NULL) { 
+		USLOSS_Console("%d has no children\n", Current->pid);
 		return -2; // has no children
 	}
 
 	if (Current->numJoins == Current->numKids) {
+		USLOSS_Console("already joined for each child\n");
 		return -2; // already joined for each child
 	}
 
 	if (Current->quitList != NULL) { // child has already quit
+		USLOSS_Console("Child has already quit\n");
 		procPtr quitChild = Current->quitList;
 		Current->quitList = Current->quitList->quitNext;
 		*status = quitChild->quitStatus;
 		Current->numJoins++;
+		dispatcher();
 		return quitChild->pid;
-
 	}
 	else { 
+		USLOSS_Console("Not done.\n");
 		Current->numJoins++;
 		//gotta wait
 	}
@@ -342,7 +347,34 @@ int join(int *status)
 	 ------------------------------------------------------------------------ */
 void quit(int status)
 {
-		p1_quit(Current->pid);
+	procPtr temp = Current->childProcPtr;
+	while (temp != NULL) { // Report error if trying to terminate a process who still has running children
+		if (temp->status != QUIT && temp->status != EMPTY) {
+			fprintf(stderr, "quit(): attempted to quit a process with active children.\n");
+			USLOSS_Halt(1);
+		}
+		temp = temp->nextSiblingPtr;
+	}
+
+	if (Current->parentPtr->quitList == NULL) {
+		Current->parentPtr->quitList = Current;
+	}
+	else {
+		procPtr curr = Current->parentPtr->quitList;
+		procPtr prev = Current->parentPtr->quitList;
+		while (curr != NULL) {
+			prev = curr;
+			curr = curr->quitNext;
+		}
+		prev->quitNext = Current;
+	}
+
+	Current->status = QUIT;
+	Current->quitStatus = status;
+
+	p1_quit(Current->pid);
+
+	dispatcher();
 } /* quit */
 
 
@@ -365,8 +397,8 @@ void dispatcher(void)
 		}
 
 		procPtr nextProcess = NULL;
-
-		for( int i = 0; i < SENTINELPRIORITY; i++){
+		int i;
+		for( i = 0; i < SENTINELPRIORITY; i++){
 			if (ReadyLists[i] != NULL){
 				USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", ReadyLists[i]->name, ReadyLists[i]->pid, i+1);
 				nextProcess = ReadyLists[i];
@@ -380,8 +412,8 @@ void dispatcher(void)
 		}
 
 		Current = nextProcess;
-		USLOSS_Halt(0); //TODO: remove this line
-
+		ReadyLists[i] = ReadyLists[i]->nextProcPtr;
+		
 		launch();
 
 
@@ -492,7 +524,7 @@ int isInterruptEnabled() {
 int enableInterrupts() {
 	unsigned int psr = USLOSS_PsrGet();
 	unsigned int op = 0x2;
-	int result = USLOSS_PsrSet(psr & op);
+	int result = USLOSS_PsrSet(psr | op);
 	if (result == USLOSS_ERR_INVALID_PSR) {
 		return -1;
 	}

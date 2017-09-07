@@ -23,6 +23,7 @@ struct procStruct {
    int             status;        /* READY, BLOCKED, QUIT, EMPTY etc. */
    int             numKids;
    int             numJoins;
+   procPtr         parentPtr;
    /* other fields as needed... */
 };
 
