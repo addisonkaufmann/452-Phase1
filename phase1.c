@@ -324,7 +324,7 @@ int join(int *status)
 		*status = quitChild->quitStatus;
 		Current->numJoins++;
 		dispatcher();
-		return quitChild->pid;
+		return quitChild->pid; // TODO: Cleanup the now joined child from the process table
 	}
 	else { 
 		USLOSS_Console("Not done.\n");
@@ -368,6 +368,8 @@ void quit(int status)
 		}
 		prev->quitNext = Current;
 	}
+
+	// TODO: Cleanup process table, including children of the now quit parent
 
 	Current->status = QUIT;
 	Current->quitStatus = status;
