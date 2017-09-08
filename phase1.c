@@ -7,6 +7,9 @@
 
 	 ------------------------------------------------------------------------ */
 
+//When to enable/disable interrupts?
+//What to do with sentinel? All processes done?
+
 #include "phase1.h"
 #include <stdlib.h>
 #include <string.h>
@@ -342,7 +345,7 @@ int join(int *status)
 	USLOSS_Console("Test cleanup should be 0 : %d\n", quitChild->status); // TODO: Remove once cleanup is confirmed to work
 
 	enableInterrupts();
-	dispatcher(); // FIXME: needed?
+	// dispatcher(); // FIXME: needed?
 	return pid;
 
 	return -1;  // TODO: if the process was zapped while waiting for a child to quit return -1;
@@ -371,22 +374,24 @@ void quit(int status)
 
 	disableInterrupts();
 
-	if (Current->parentPtr->quitList == NULL) {
-		Current->parentPtr->quitList = Current;
-	}
-	else {
-		procPtr curr = Current->parentPtr->quitList;
-		procPtr prev = Current->parentPtr->quitList;
-		while (curr != NULL) {
-			prev = curr;
-			curr = curr->quitNext;
+	if (Current->parentPtr != NULL){
+		if (Current->parentPtr->quitList == NULL) {
+			Current->parentPtr->quitList = Current;
 		}
-		prev->quitNext = Current;
-	}
+		else {
+			procPtr curr = Current->parentPtr->quitList;
+			procPtr prev = Current->parentPtr->quitList;
+			while (curr != NULL) {
+				prev = curr;
+				curr = curr->quitNext;
+			}
+			prev->quitNext = Current;
+		}
 
-	// Unblock blocked parent
-	if (Current->parentPtr->status == BLOCKED) {
-		Current->parentPtr->status = READY;
+		// Unblock blocked parent
+		if (Current->parentPtr->status == BLOCKED) {
+			Current->parentPtr->status = READY;
+		}
 	}
 
 	// Cleanup process table of all children of the now quit parent (if a parent)
@@ -403,6 +408,7 @@ void quit(int status)
 	Current->quitStatus = status;
 
 	p1_quit(Current->pid);
+	Current = NULL;
 
 	enableInterrupts();
 
@@ -433,17 +439,29 @@ void dispatcher(void)
 		int i;
 		for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
 			temp = ReadyLists[i];
+			// USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
 			while (temp != NULL && temp->status != READY){
+				// USLOSS_Console("name = %s, pid = %d, status = %d\n", temp->name, temp->pid, temp->status);
 				temp = temp->nextProcPtr;
 			}
-
-			USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", ReadyLists[i]->name, ReadyLists[i]->pid, i+1);
+			
+			// if (temp != NULL){
+			// 	USLOSS_Console("name = %s, pid = %d, status = %d\n", temp->name, temp->pid, temp->status);
+			// } else {
+			// 	USLOSS_Console("null\n");
+			// }
 
 			if (temp != NULL){
 				nextProcess = temp;
+				// USLOSS_Console("------------------------------------\n");		
 				break;
-			}			
+			}
+
+			// USLOSS_Console("------------------------------------\n");		
+	
 		}
+		USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", temp->name, temp->pid, i+1);
+
 
 
 		if (Current == NULL){ //possibly
