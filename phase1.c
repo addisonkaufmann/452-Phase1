@@ -35,6 +35,15 @@ void initProcessTable();
 void initReadyLists();
 void addProcToReadyLists();
 void cleanProcess(procPtr);
+void dumpProcesses();
+int   zap(int pid);
+int   isZapped(void);
+int   getpid(void);
+int   blockMe(int block_status);
+int   unblockProc(int pid);
+int   readCurStartTime(void);
+void  timeSlice(void);
+int   readtime(void);
 
 
 
@@ -685,4 +694,46 @@ void cleanProcess(procPtr proc) {
 	proc->parentPtr = NULL;
 	proc->quitStatus = 0;
 	proc->status = EMPTY;
+}
+
+void dumpProcesses() {
+	// TODO
+}
+
+int zap(int pid) {
+	// TODO
+	return -1000;
+}
+int isZapped(void) {
+	// TODO
+	return -1000;
+}
+
+int getpid(void) {
+	// TODO
+	return -1000;
+}
+
+int blockMe(int block_status) {
+	// TODO
+	return -1000;
+}
+
+int unblockProc(int pid) {
+	// TODO
+	return -1000;
+}
+
+int readCurStartTime(void) {
+	// TODO
+	return -1000;
+}
+
+void timeSlice(void) {
+	// TODO
+}
+
+int readtime(void) {
+	// TODO
+	return -1000;
 }
