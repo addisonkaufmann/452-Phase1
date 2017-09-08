@@ -198,7 +198,9 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		ProcTable[procSlot].stack = (char *) malloc(stacksize * sizeof(char));
 		ProcTable[procSlot].stackSize = stacksize;
 		ProcTable[procSlot].status = READY;
-		// set the status to ready?
+		ProcTable[procSlot].numJoins = 0;
+		ProcTable[procSlot].numKids = 0;
+
 		if ( arg == NULL ) {
 				ProcTable[procSlot].startArg[0] = '\0';
 		}
@@ -318,27 +320,32 @@ int join(int *status)
 		return -2; // already joined for each child
 	}
 
+	disableInterrupts();
+
 	if (Current->quitList != NULL) { // child has already quit
-		USLOSS_Console("Join(): Child has already quit\n");
-		procPtr quitChild = Current->quitList;
-		Current->quitList = Current->quitList->quitNext;
-		*status = quitChild->quitStatus;
-		Current->numJoins++;
-		int pid = quitChild->pid;
-		cleanProcess(quitChild);
-		USLOSS_Console("Test cleanup: %d\n", quitChild->status);
-		dispatcher(); // FIXME: needed?
-		return pid;
+		if (DEBUG && debugflag)
+			USLOSS_Console("Join(): Child has already quit\n");
 	}
 	else { 
-		USLOSS_Console("Not done.\n");
+		if (DEBUG && debugflag)
+			USLOSS_Console("Join(): Must wait for child\n");
 		Current->status = BLOCKED;
-
-		Current->numJoins++;
-		//gotta wait
+		dispatcher();
 	}
 
-	return -1;  // if the process was zapped while waiting for a child to quit.
+	procPtr quitChild = Current->quitList;
+	Current->quitList = Current->quitList->quitNext;
+	*status = quitChild->quitStatus;
+	Current->numJoins++;
+	int pid = quitChild->pid;
+	cleanProcess(quitChild);
+	USLOSS_Console("Test cleanup should be 0 : %d\n", quitChild->status); // TODO: Remove once cleanup is confirmed to work
+
+	enableInterrupts();
+	dispatcher(); // FIXME: needed?
+	return pid;
+
+	return -1;  // TODO: if the process was zapped while waiting for a child to quit return -1;
 } /* join */
 
 
@@ -362,6 +369,8 @@ void quit(int status)
 		temp = temp->nextSiblingPtr;
 	}
 
+	disableInterrupts();
+
 	if (Current->parentPtr->quitList == NULL) {
 		Current->parentPtr->quitList = Current;
 	}
@@ -375,12 +384,27 @@ void quit(int status)
 		prev->quitNext = Current;
 	}
 
-	// TODO: Cleanup process table, including children of the now quit parent
+	// Unblock blocked parent
+	if (Current->parentPtr->status == BLOCKED) {
+		Current->parentPtr->status = READY;
+	}
+
+	// Cleanup process table of all children of the now quit parent (if a parent)
+	if (Current->childProcPtr != NULL) {
+		procPtr curr = Current->childProcPtr;
+		while (curr != NULL) {
+			procPtr next = curr->nextSiblingPtr;
+			cleanProcess(curr);
+			curr = next;
+		}
+	}
 
 	Current->status = QUIT;
 	Current->quitStatus = status;
 
 	p1_quit(Current->pid);
+
+	enableInterrupts();
 
 	dispatcher();
 } /* quit */
@@ -602,6 +626,13 @@ void addProcToReadyLists(int procSlot, int priority){
 	USLOSS_Console("fork1(): adding %s to readylist at priority %d\n", ReadyLists[rl_index]->name, priority);
 }
 
-void cleanProcess(procPtr proc) {
-	// TODO
+void cleanProcess(procPtr proc) {	
+	proc->nextProcPtr = NULL;
+	proc->childProcPtr = NULL;
+	proc->nextSiblingPtr = NULL;
+	proc->quitList = NULL;
+	proc->quitNext = NULL;
+	proc->parentPtr = NULL;
+	proc->quitStatus = 0;
+	proc->status = EMPTY;
 }
