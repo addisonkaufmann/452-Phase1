@@ -50,7 +50,7 @@ int   readtime(void);
 /* -------------------------- Globals ------------------------------------- */
 
 // Patrick's debugging global variable...
-int debugflag = 0;
+int debugflag = 1;
 
 // the process table
 procStruct ProcTable[MAXPROC];
@@ -215,6 +215,8 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		ProcTable[procSlot].status = READY;
 		ProcTable[procSlot].numJoins = 0;
 		ProcTable[procSlot].numKids = 0;
+		ProcTable[procSlot].numLiveKids = 0;
+
 
 		if ( arg == NULL ) {
 				ProcTable[procSlot].startArg[0] = '\0';
@@ -261,7 +263,10 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 			}
 			ProcTable[procSlot].parentPtr = Current;
 			Current->numKids++;
+			Current->numLiveKids++;
+
 		}
+		USLOSS_Console("past the block\n");
 
 
 		// More stuff to do here...
@@ -274,6 +279,9 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		}
 
 		enableInterrupts();
+		if (pid >48){
+			dumpProcesses();
+		}
 
 		return pid;
 } /* fork1 */
@@ -356,6 +364,9 @@ int join(int *status)
 
 	enableInterrupts();
 	// dispatcher(); // FIXME: needed?
+	if (pid >48){
+		dumpProcesses();
+	}
 	return pid;
 
 	return -1;  // TODO: if the process was zapped while waiting for a child to quit return -1;
@@ -385,6 +396,8 @@ void quit(int status)
 	disableInterrupts();
 
 	if (Current->parentPtr != NULL){
+		Current->parentPtr->numLiveKids--;
+
 		if (Current->parentPtr->quitList == NULL) {
 			Current->parentPtr->quitList = Current;
 		}
@@ -397,7 +410,6 @@ void quit(int status)
 			}
 			prev->quitNext = Current;
 		}
-
 		// Unblock blocked parent
 		if (Current->parentPtr->status == JOINBLOCKED) {
 			Current->parentPtr->status = READY;
@@ -458,25 +470,28 @@ void dispatcher(void)
 		int i;
 		for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
 			temp = ReadyLists[i];
-			// USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
+			USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
 			while (temp != NULL && temp->status != READY){
-				// USLOSS_Console("name = %s, pid = %d, status = %d\n", temp->name, temp->pid, temp->status);
+				int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
+				USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
 				temp = temp->nextProcPtr;
 			}
 			
-			// if (temp != NULL){
-			// 	USLOSS_Console("name = %s, pid = %d, status = %d\n", temp->name, temp->pid, temp->status);
-			// } else {
-			// 	USLOSS_Console("null\n");
-			// }
+
+			if (temp != NULL){
+				int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
+				USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
+			} else {
+				USLOSS_Console("null\n");
+			}
 
 			if (temp != NULL){
 				nextProcess = temp;
-				// USLOSS_Console("------------------------------------\n");		
+				USLOSS_Console("------------------------------------\n");		
 				break;
 			}
 
-			// USLOSS_Console("------------------------------------\n");		
+			USLOSS_Console("------------------------------------\n");		
 	
 		}
 
@@ -659,9 +674,12 @@ int isProcessTableFull(){
 	Scans for available pid
 */
 unsigned int getNextPid(){
+	// USLOSS_Console("---next pid = %d before loop--\n", nextPid);
 	while (ProcTable[(nextPid - 1) % MAXPROC].status != EMPTY){
 		nextPid++;
 	}
+	// USLOSS_Console("---next pid = %d after loop--\n", nextPid);
+
 	return nextPid;
 }
 
@@ -676,24 +694,43 @@ void initReadyLists(){
 }
 
 void addProcToReadyLists(int procSlot, int priority){
+
 	int rl_index = priority - 1;
 
 	if (ReadyLists[rl_index] == NULL){
 		ReadyLists[rl_index] = &ProcTable[procSlot];
 	} else {
-		procPtr fore = ReadyLists[rl_index];
-		procPtr aft = NULL;
-		while (fore != NULL){
-			aft = fore;
-			fore = fore->nextProcPtr;
+		procPtr prev = NULL;
+		procPtr curr = ReadyLists[rl_index];
+		while (curr != NULL){
+			prev = curr;
+			curr = curr->nextProcPtr;
 		}
-		aft->nextProcPtr = &ProcTable[procSlot];
+		prev->nextProcPtr = &ProcTable[procSlot];
 	}
 	if (DEBUG && debugflag)
 		USLOSS_Console("fork1(): adding %s to readylist at priority %d\n", ReadyLists[rl_index]->name, priority);
 }
 
 void cleanProcess(procPtr proc) {	
+	USLOSS_Console("cleanProcess(): removing %d from ReadyList\n", proc->pid);
+	//remove proc from ready list
+	if (ReadyLists[proc->priority -1] != NULL){
+
+		if (ReadyLists[proc->priority -1]->pid == proc->pid){
+			ReadyLists[proc->priority -1] = proc->nextProcPtr;
+		} else {
+			procPtr fore = ReadyLists[proc->priority -1]->nextProcPtr;
+			procPtr aft = ReadyLists[proc->priority -1];
+			while (fore != NULL && fore->pid != proc->pid){
+
+				aft = fore;
+				fore = fore->nextProcPtr;
+			}
+
+			aft->nextProcPtr = proc->nextProcPtr;
+		}
+	}
 	proc->nextProcPtr = NULL;
 	proc->childProcPtr = NULL;
 	proc->nextSiblingPtr = NULL;
@@ -716,14 +753,14 @@ void dumpProcesses() {
 	statuses[ZAPBLOCKED] = "ZAPBLOCKED";
 	statuses[QUIT] = "QUIT";
 
-	USLOSS_Console(" SLOT   PID       NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN   TIME USED \n");
-	USLOSS_Console("------ ----- -------------- ----------- ---------- ------------ -------------- -----------\n");
+	USLOSS_Console(" SLOT   PID       NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN  NUM LIVE KIDS  NUM JOINS   TIME USED \n");
+	USLOSS_Console("------ ----- -------------- ----------- ---------- ------------ -------------- ------------- ----------- -----------\n");
 	for (int i = 0; i < MAXPROC; i++){
-		if (ProcTable[i].status != EMPTY){
+		if (1){
 			procPtr temp = &ProcTable[i];
 			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
 
-			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, 0);
+			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %13d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, temp->numLiveKids, temp->numJoins, 0);
 
 		}
 

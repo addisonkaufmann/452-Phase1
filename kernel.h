@@ -27,6 +27,7 @@ struct procStruct {
    int             zapped;
    procPtr         zapperList;
    procPtr         zapperNext;
+   int             numLiveKids;
    /* other fields as needed... */
 };
 
