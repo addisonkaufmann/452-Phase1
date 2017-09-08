@@ -415,6 +415,8 @@ void quit(int status)
 		}
 	}
 
+	// TODO: Unblock all processes that have zapped me
+
 	Current->status = QUIT;
 	Current->quitStatus = status;
 
@@ -694,6 +696,9 @@ void cleanProcess(procPtr proc) {
 	proc->parentPtr = NULL;
 	proc->quitStatus = 0;
 	proc->status = EMPTY;
+	proc->zapped = 0;
+	proc->zapperList = NULL;
+	proc->zapperNext = NULL;
 }
 
 void dumpProcesses() {
@@ -701,17 +706,26 @@ void dumpProcesses() {
 }
 
 int zap(int pid) {
-	// TODO
+	if (pid == Current->pid) {
+		fprintf(stderr, "zap(): Cannot zap yourself.\n");
+		USLOSS_Halt(1);
+	}
+
+	procSlot = (pid - 1) % MAXPROC;
+	if (ProcTable[procSlot].status == EMPTY) {
+		fprintf(stderr, "zap(): Process to zap does not exist.\n");
+		USLOSS_Halt(1);
+	}
+
+
 	return -1000;
 }
 int isZapped(void) {
-	// TODO
-	return -1000;
+	return Current->zapped;
 }
 
 int getpid(void) {
-	// TODO
-	return -1000;
+	return Current->pid;
 }
 
 int blockMe(int block_status) {

@@ -24,6 +24,9 @@ struct procStruct {
    int             numKids;
    int             numJoins;
    procPtr         parentPtr;
+   int             zapped;
+   procPtr         zapperList;
+   procPtr         zapperNext;
    /* other fields as needed... */
 };
 
