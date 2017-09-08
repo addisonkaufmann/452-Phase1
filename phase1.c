@@ -50,7 +50,7 @@ int   readtime(void);
 /* -------------------------- Globals ------------------------------------- */
 
 // Patrick's debugging global variable...
-int debugflag = 1;
+int debugflag = 0;
 
 // the process table
 procStruct ProcTable[MAXPROC];
@@ -395,9 +395,11 @@ void quit(int status)
 
 	disableInterrupts();
 
+	// If parent exsts, add quitting child to their quit list, remove the quitting child from their child list, and unblock them if need be
 	if (Current->parentPtr != NULL){
 		Current->parentPtr->numLiveKids--;
 
+		// Add to quitlist
 		if (Current->parentPtr->quitList == NULL) {
 			Current->parentPtr->quitList = Current;
 		}
@@ -410,6 +412,26 @@ void quit(int status)
 			}
 			prev->quitNext = Current;
 		}
+
+		// Remove from child list
+		procPtr curr = Current->parentPtr->childProcPtr;
+		procPtr prev = NULL;
+		if (curr->pid == Current->pid) {
+			Current->parentPtr->childProcPtr = Current->nextSiblingPtr;
+		}
+		else {
+			while (curr->pid != Current->pid) {
+				if (curr == NULL) {
+					fprintf(stderr, "quit(): Can't find self in parent's child list to remove self.\n");
+					USLOSS_Halt(1);
+				}
+				prev = curr;
+				curr = curr->nextSiblingPtr;
+			}
+			prev->nextSiblingPtr = curr->nextSiblingPtr;
+		}
+
+
 		// Unblock blocked parent
 		if (Current->parentPtr->status == JOINBLOCKED) {
 			Current->parentPtr->status = READY;
