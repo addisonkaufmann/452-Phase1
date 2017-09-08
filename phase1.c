@@ -411,10 +411,19 @@ void dispatcher(void)
 			p1_switch(Current->pid, nextProcess->pid);
 		}
 
-		Current = nextProcess;
-		ReadyLists[i] = ReadyLists[i]->nextProcPtr;
+		//get old and new contexts
+		USLOSS_Context * oldContext = Current == NULL ? NULL : &Current->state;
+		USLOSS_Context * newContext = &nextProcess->state;
+
+		//ReadyLists[i] = ReadyLists[i]->nextProcPtr; // pop the ready list
 		
-		launch();
+		//reset current
+		Current = nextProcess;
+
+		//call to context switch
+		USLOSS_ContextSwitch(oldContext, newContext);
+
+
 
 
 } /* dispatcher */
