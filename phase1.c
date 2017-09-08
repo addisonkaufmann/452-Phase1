@@ -44,6 +44,7 @@ int   unblockProc(int pid);
 int   readCurStartTime(void);
 void  timeSlice(void);
 int   readtime(void);
+void  clockHandler(int dev, int unit);
 
 
 
@@ -91,7 +92,8 @@ void startup(int argc, char *argv[])
 				USLOSS_Console("startup(): initializing the Ready list\n");
 		initReadyLists();
 
-		// Initialize the clock interrupt handler -- ignoring for now
+		// Initialize the clock interrupt handler
+		USLOSS_IntVec[USLOSS_CLOCK_INT] = clockHandler;
 
 		// startup a sentinel process
 		if (DEBUG && debugflag)
@@ -266,7 +268,6 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 			Current->numLiveKids++;
 
 		}
-		USLOSS_Console("past the block\n");
 
 
 		// More stuff to do here...
@@ -279,9 +280,6 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		}
 
 		enableInterrupts();
-		if (pid >48){
-			dumpProcesses();
-		}
 
 		return pid;
 } /* fork1 */
@@ -364,9 +362,6 @@ int join(int *status)
 
 	enableInterrupts();
 	// dispatcher(); // FIXME: needed?
-	if (pid >48){
-		dumpProcesses();
-	}
 	return pid;
 
 	return -1;  // TODO: if the process was zapped while waiting for a child to quit return -1;
@@ -486,34 +481,35 @@ void dispatcher(void)
 			USLOSS_Console("dispatcher(): Sentinel does not exist in ready list\n");
 			USLOSS_Halt(1);
 		}
+		disableInterrupts();
 
 		procPtr nextProcess = NULL;
 		procPtr temp = NULL;
 		int i;
 		for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
 			temp = ReadyLists[i];
-			USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
+			// USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
 			while (temp != NULL && temp->status != READY){
-				int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
-				USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
+				//int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
+				// USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
 				temp = temp->nextProcPtr;
 			}
 			
 
-			if (temp != NULL){
-				int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
-				USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
-			} else {
-				USLOSS_Console("null\n");
-			}
+			// if (temp != NULL){
+			// 	int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
+			// 	USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
+			// } else {
+			// 	USLOSS_Console("null\n");
+			// }
 
 			if (temp != NULL){
 				nextProcess = temp;
-				USLOSS_Console("------------------------------------\n");		
+				// USLOSS_Console("------------------------------------\n");		
 				break;
 			}
 
-			USLOSS_Console("------------------------------------\n");		
+			// USLOSS_Console("------------------------------------\n");		
 	
 		}
 
@@ -540,7 +536,7 @@ void dispatcher(void)
 		//call to context switch
 		USLOSS_ContextSwitch(oldContext, newContext);
 
-
+		enableInterrupts();
 
 
 } /* dispatcher */
@@ -735,7 +731,8 @@ void addProcToReadyLists(int procSlot, int priority){
 }
 
 void cleanProcess(procPtr proc) {	
-	USLOSS_Console("cleanProcess(): removing %d from ReadyList\n", proc->pid);
+	if (DEBUG && debugflag)
+		USLOSS_Console("cleanProcess(): removing %d from ReadyList\n", proc->pid);
 	//remove proc from ready list
 	if (ReadyLists[proc->priority -1] != NULL){
 
@@ -854,4 +851,8 @@ void timeSlice(void) {
 int readtime(void) {
 	// TODO
 	return -1000;
+}
+
+void clockHandler(int dev, int unit){
+	return;
 }
