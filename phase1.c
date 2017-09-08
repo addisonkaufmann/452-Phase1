@@ -151,6 +151,7 @@ void finish(int argc, char *argv[])
 int fork1(char *name, int (*startFunc)(char *), char *arg,
 					int stacksize, int priority)
 {
+		dumpProcesses();
 		int procSlot = -1;
 
 		if (DEBUG && debugflag)
@@ -696,8 +697,20 @@ void cleanProcess(procPtr proc) {
 	proc->status = EMPTY;
 }
 
+// its PID, parent’s PID, priority, process status (e.g. empty, running, ready, blocked, etc.), number of children, CPU time consumed, and na
 void dumpProcesses() {
-	// TODO
+	USLOSS_Console(" SLOT    PID        NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN   TIME USED \n");
+	USLOSS_Console("------ ------- -------------- ----------- ---------- ------------ -------------- -----------\n");
+	for (int i = 0; i < MAXPROC; i++){
+		if (ProcTable[i].status != EMPTY){
+			procPtr temp = &ProcTable[i];
+			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
+
+			USLOSS_Console("%6d %7d %14s %11d %10d %12s %14d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, "XX", temp->numKids, 0);
+
+		}
+
+	}
 }
 
 int zap(int pid) {
