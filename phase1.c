@@ -397,14 +397,23 @@ void dispatcher(void)
 		}
 
 		procPtr nextProcess = NULL;
+		procPtr temp = NULL;
 		int i;
-		for( i = 0; i < SENTINELPRIORITY; i++){
-			if (ReadyLists[i] != NULL){
-				USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", ReadyLists[i]->name, ReadyLists[i]->pid, i+1);
-				nextProcess = ReadyLists[i];
-				break;
+		for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
+			temp = ReadyLists[i];
+			while (temp != NULL && temp->status != READY){
+				temp = temp->nextProcPtr;
 			}
+
+			USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", ReadyLists[i]->name, ReadyLists[i]->pid, i+1);
+
+			if (temp != NULL){
+				nextProcess = temp;
+				break;
+			}			
 		}
+
+
 		if (Current == NULL){ //possibly
 			p1_switch(-1, nextProcess->pid);
 		} else {
