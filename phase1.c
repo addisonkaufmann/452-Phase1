@@ -227,9 +227,6 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 				strcpy(ProcTable[procSlot].startArg, arg);
 		}
 
-		//add new process to readylist
-
-
 		// Initialize context for this process, but use launch function pointer for
 		// the initial value of the process's program counter (PC)
 
@@ -345,7 +342,7 @@ int join(int *status)
 	else { 
 		if (DEBUG && debugflag)
 			USLOSS_Console("Join(): Must wait for child\n");
-		Current->status = BLOCKED;
+		Current->status = JOINBLOCKED;
 		dispatcher();
 	}
 
@@ -401,7 +398,7 @@ void quit(int status)
 		}
 
 		// Unblock blocked parent
-		if (Current->parentPtr->status == BLOCKED) {
+		if (Current->parentPtr->status == JOINBLOCKED) {
 			Current->parentPtr->status = READY;
 		}
 	}
@@ -413,6 +410,15 @@ void quit(int status)
 			procPtr next = curr->nextSiblingPtr;
 			cleanProcess(curr);
 			curr = next;
+		}
+	}
+
+	// Unblock all processes that have zapped me
+	if (Current->zapperList != NULL) {
+		procPtr curr = Current->zapperList;
+		while (curr != NULL) {
+			curr->status = READY;
+			curr = curr->zapperNext;
 		}
 	}
 
@@ -535,7 +541,7 @@ static void checkDeadlock()
 		if (temp != NULL) {
 			procPtr proc = ReadyLists[i];
 			while (proc != NULL) {
-				if ( (proc->status == READY || proc->status == BLOCKED)) {
+				if (proc->status == READY || proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED ) {
 					fprintf(stderr, "checkDeadlock(): found another process (name: %s, pid: %d) on the ready list.\n", proc->name, proc->pid);
 					USLOSS_Halt(1);
 				}
@@ -695,6 +701,9 @@ void cleanProcess(procPtr proc) {
 	proc->parentPtr = NULL;
 	proc->quitStatus = 0;
 	proc->status = EMPTY;
+	proc->zapped = 0;
+	proc->zapperList = NULL;
+	proc->zapperNext = NULL;
 }
 
 // its PID, parent’s PID, priority, process status (e.g. empty, running, ready, blocked, etc.), number of children, CPU time consumed, and na
@@ -714,17 +723,46 @@ void dumpProcesses() {
 }
 
 int zap(int pid) {
-	// TODO
-	return -1000;
+	if (pid == Current->pid) {
+		fprintf(stderr, "zap(): Cannot zap yourself.\n");
+		USLOSS_Halt(1);
+	}
+
+	int procSlot = (pid - 1) % MAXPROC;
+	if (ProcTable[procSlot].status == EMPTY || ProcTable[procSlot].status == QUIT) {
+		fprintf(stderr, "zap(): Process to zap does not exist.\n");
+		USLOSS_Halt(1);
+	}
+
+	ProcTable[procSlot].zapped = 1;
+	if (ProcTable[procSlot].zapperList == NULL) {
+		ProcTable[procSlot].zapperList = Current;
+	}
+	else {
+		procPtr prev = NULL;
+		procPtr curr = ProcTable[procSlot].zapperList;
+		while (curr != NULL) {
+			prev = curr;
+			curr = curr->zapperNext;
+		}
+		prev->zapperNext = Current;
+	}
+
+	Current->status = ZAPBLOCKED;
+
+	if (isZapped()) {
+		return -1;
+	}
+
+	return 0;
 }
+
 int isZapped(void) {
-	// TODO
-	return -1000;
+	return Current->zapped;
 }
 
 int getpid(void) {
-	// TODO
-	return -1000;
+	return Current->pid;
 }
 
 int blockMe(int block_status) {

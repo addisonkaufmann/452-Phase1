@@ -24,6 +24,9 @@ struct procStruct {
    int             numKids;
    int             numJoins;
    procPtr         parentPtr;
+   int             zapped;
+   procPtr         zapperList;
+   procPtr         zapperNext;
    /* other fields as needed... */
 };
 
@@ -48,6 +51,7 @@ union psrValues {
 #define SENTINELPRIORITY (MINPRIORITY + 1)
 #define EMPTY 0
 #define READY 1
-#define BLOCKED 2
-#define QUIT 3
+#define JOINBLOCKED 2
+#define ZAPBLOCKED 3
+#define QUIT 4
 
