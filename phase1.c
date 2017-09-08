@@ -41,7 +41,7 @@ void cleanProcess(procPtr);
 /* -------------------------- Globals ------------------------------------- */
 
 // Patrick's debugging global variable...
-int debugflag = 1;
+int debugflag = 0;
 
 // the process table
 procStruct ProcTable[MAXPROC];
@@ -186,7 +186,9 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		int pid = getNextPid();
 		procSlot = (pid - 1) % MAXPROC;
-		USLOSS_Console("fork1(): %s's pid is %d\n", name, pid);
+
+		if (DEBUG && debugflag)
+			USLOSS_Console("fork1(): %s's pid is %d\n", name, pid);
 
 
 		// fill-in entry in process table */
@@ -259,7 +261,8 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		addProcToReadyLists(procSlot, priority);
 
 		if (0 != strcmp(ProcTable[procSlot].name, "sentinel")) { // do not call dispatcher when creating sentinel
-			USLOSS_Console("fork1(): calling dispatcher()\n");
+			if (DEBUG && debugflag)
+				USLOSS_Console("fork1(): calling dispatcher()\n");
 			dispatcher();
 		}
 
@@ -342,7 +345,6 @@ int join(int *status)
 	Current->numJoins++;
 	int pid = quitChild->pid;
 	cleanProcess(quitChild);
-	USLOSS_Console("Test cleanup should be 0 : %d\n", quitChild->status); // TODO: Remove once cleanup is confirmed to work
 
 	enableInterrupts();
 	// dispatcher(); // FIXME: needed?
@@ -460,7 +462,9 @@ void dispatcher(void)
 			// USLOSS_Console("------------------------------------\n");		
 	
 		}
-		USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", temp->name, temp->pid, i+1);
+
+		if (DEBUG && debugflag)
+			USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", temp->name, temp->pid, i+1);
 
 
 
@@ -515,6 +519,24 @@ int sentinel (char *dummy)
 /* check to determine if deadlock has occurred... */
 static void checkDeadlock()
 {
+	int i;
+	for( i = 0; i < MINPRIORITY; i++){ //loop through each priority
+		procPtr temp = ReadyLists[i];
+		if (temp != NULL) {
+			procPtr proc = ReadyLists[i];
+			while (proc != NULL) {
+				if ( (proc->status == READY || proc->status == BLOCKED)) {
+					fprintf(stderr, "checkDeadlock(): found another process (name: %s, pid: %d) on the ready list.\n", proc->name, proc->pid);
+					USLOSS_Halt(1);
+				}
+				proc = proc->nextProcPtr;
+			}
+		}
+	}
+
+	USLOSS_Console("All processes completed.\n");
+	USLOSS_Halt(0);
+
 } /* checkDeadlock */
 
 
@@ -633,7 +655,7 @@ void initProcessTable(){
 }
 
 void initReadyLists(){
-	//do something maybe
+	// TODO: do something maybe
 }
 
 void addProcToReadyLists(int procSlot, int priority){
@@ -650,7 +672,8 @@ void addProcToReadyLists(int procSlot, int priority){
 		}
 		aft->nextProcPtr = &ProcTable[procSlot];
 	}
-	USLOSS_Console("fork1(): adding %s to readylist at priority %d\n", ReadyLists[rl_index]->name, priority);
+	if (DEBUG && debugflag)
+		USLOSS_Console("fork1(): adding %s to readylist at priority %d\n", ReadyLists[rl_index]->name, priority);
 }
 
 void cleanProcess(procPtr proc) {	
