@@ -31,6 +31,7 @@ int isProcessTableFull();
 void initProcessTable();
 void initReadyLists();
 void addProcToReadyLists();
+void cleanProcess(procPtr);
 
 
 
@@ -318,16 +319,21 @@ int join(int *status)
 	}
 
 	if (Current->quitList != NULL) { // child has already quit
-		USLOSS_Console("Child has already quit\n");
+		USLOSS_Console("Join(): Child has already quit\n");
 		procPtr quitChild = Current->quitList;
 		Current->quitList = Current->quitList->quitNext;
 		*status = quitChild->quitStatus;
 		Current->numJoins++;
-		dispatcher();
-		return quitChild->pid; // TODO: Cleanup the now joined child from the process table
+		int pid = quitChild->pid;
+		cleanProcess(quitChild);
+		USLOSS_Console("Test cleanup: %d\n", quitChild->status);
+		dispatcher(); // FIXME: needed?
+		return pid;
 	}
 	else { 
 		USLOSS_Console("Not done.\n");
+		Current->status = BLOCKED;
+
 		Current->numJoins++;
 		//gotta wait
 	}
@@ -585,4 +591,8 @@ void addProcToReadyLists(int procSlot, int priority){
 		aft->nextProcPtr = &ProcTable[procSlot];
 	}
 	USLOSS_Console("fork1(): adding %s to readylist at priority %d\n", ReadyLists[rl_index]->name, priority);
+}
+
+void cleanProcess(procPtr proc) {
+	// TODO
 }
