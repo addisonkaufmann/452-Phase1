@@ -151,7 +151,6 @@ void finish(int argc, char *argv[])
 int fork1(char *name, int (*startFunc)(char *), char *arg,
 					int stacksize, int priority)
 {
-		dumpProcesses();
 		int procSlot = -1;
 
 		if (DEBUG && debugflag)
@@ -209,6 +208,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		strcpy(ProcTable[procSlot].name, name);
 		ProcTable[procSlot].pid = pid;
+		ProcTable[procSlot].priority = priority;
 		ProcTable[procSlot].startFunc = startFunc;
 		ProcTable[procSlot].stack = (char *) malloc(stacksize * sizeof(char));
 		ProcTable[procSlot].stackSize = stacksize;
@@ -274,6 +274,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		}
 
 		enableInterrupts();
+
 		return pid;
 } /* fork1 */
 
@@ -708,14 +709,21 @@ void cleanProcess(procPtr proc) {
 
 // its PID, parent’s PID, priority, process status (e.g. empty, running, ready, blocked, etc.), number of children, CPU time consumed, and na
 void dumpProcesses() {
-	USLOSS_Console(" SLOT    PID        NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN   TIME USED \n");
-	USLOSS_Console("------ ------- -------------- ----------- ---------- ------------ -------------- -----------\n");
+	char * statuses[5];
+	statuses[EMPTY] = "EMPTY";
+	statuses[READY] = "READY";
+	statuses[JOINBLOCKED] = "JOINBLOCKED";
+	statuses[ZAPBLOCKED] = "ZAPBLOCKED";
+	statuses[QUIT] = "QUIT";
+
+	USLOSS_Console(" SLOT   PID       NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN   TIME USED \n");
+	USLOSS_Console("------ ----- -------------- ----------- ---------- ------------ -------------- -----------\n");
 	for (int i = 0; i < MAXPROC; i++){
 		if (ProcTable[i].status != EMPTY){
 			procPtr temp = &ProcTable[i];
 			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
 
-			USLOSS_Console("%6d %7d %14s %11d %10d %12s %14d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, "XX", temp->numKids, 0);
+			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, 0);
 
 		}
 
