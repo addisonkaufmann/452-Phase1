@@ -44,7 +44,7 @@ int   unblockProc(int pid);
 int   readCurStartTime(void);
 void  timeSlice(void);
 int   readtime(void);
-void  clockHandler(int dev, int unit);
+void  clockHandler(int dev, void * arg);
 
 
 
@@ -153,6 +153,7 @@ void finish(int argc, char *argv[])
 int fork1(char *name, int (*startFunc)(char *), char *arg,
 					int stacksize, int priority)
 {
+		disableInterrupts();
 		int procSlot = -1;
 
 		if (DEBUG && debugflag)
@@ -166,6 +167,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		if (name == NULL || startFunc == NULL) {
 			fprintf(stderr, "fork1(): Name and/or start function cannot be null.\n");
+			enableInterrupts();
 			return -1;
 		}
 
@@ -178,22 +180,23 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		// check for priority out of range
 		if (priority > SENTINELPRIORITY || priority < MAXPRIORITY) {
 			fprintf(stderr, "fork1(): Priority out of range.\n");
+			enableInterrupts();
 			return -1;
 		}
 
 		// Return if stack size is too small
 		if ( stacksize < USLOSS_MIN_STACK ){
 			USLOSS_Console("fork1(): Requested Stack size too small.\n");
+			enableInterrupts();
 			return -2;
 		}
 
 		// Is there room in the process table? What is the next PID?
 		if (isProcessTableFull()){
 			USLOSS_Console("fork1(): Process Table is full.\n");
+			enableInterrupts();
 			return -1;
 		}
-
-		disableInterrupts();
 
 		int pid = getNextPid();
 		procSlot = (pid - 1) % MAXPROC;
@@ -276,6 +279,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		if (0 != strcmp(ProcTable[procSlot].name, "sentinel")) { // do not call dispatcher when creating sentinel
 			if (DEBUG && debugflag)
 				USLOSS_Console("fork1(): calling dispatcher()\n");
+			enableInterrupts();
 			dispatcher();
 		}
 
@@ -330,17 +334,21 @@ void launch()
 	 ------------------------------------------------------------------------ */
 int join(int *status)
 {
-	if (Current->childProcPtr == NULL) { 
-		USLOSS_Console("%d has no children\n", Current->pid);
+	disableInterrupts();
+
+	if (Current->childProcPtr == NULL && Current->quitList == NULL) {
+		if (DEBUG && debugflag)
+			USLOSS_Console("join(): %d has no children\n", Current->pid);
+		enableInterrupts();
 		return -2; // has no children
 	}
 
 	if (Current->numJoins == Current->numKids) {
-		USLOSS_Console("already joined for each child\n");
+		if (DEBUG && debugflag)
+			USLOSS_Console("join(): already joined for each child\n");
+		enableInterrupts();
 		return -2; // already joined for each child
 	}
-
-	disableInterrupts();
 
 	if (Current->quitList != NULL) { // child has already quit
 		if (DEBUG && debugflag)
@@ -350,7 +358,11 @@ int join(int *status)
 		if (DEBUG && debugflag)
 			USLOSS_Console("Join(): Must wait for child\n");
 		Current->status = JOINBLOCKED;
+		enableInterrupts();
 		dispatcher();
+		if (isZapped()) {
+			return -1;  // if the process was zapped while waiting for a child to quit return -1;
+		}
 	}
 
 	procPtr quitChild = Current->quitList;
@@ -364,7 +376,6 @@ int join(int *status)
 	// dispatcher(); // FIXME: needed?
 	return pid;
 
-	return -1;  // TODO: if the process was zapped while waiting for a child to quit return -1;
 } /* join */
 
 
@@ -379,6 +390,8 @@ int join(int *status)
 	 ------------------------------------------------------------------------ */
 void quit(int status)
 {
+	disableInterrupts();
+
 	procPtr temp = Current->childProcPtr;
 	while (temp != NULL) { // Report error if trying to terminate a process who still has running children
 		if (temp->status != QUIT && temp->status != EMPTY) {
@@ -387,8 +400,6 @@ void quit(int status)
 		}
 		temp = temp->nextSiblingPtr;
 	}
-
-	disableInterrupts();
 
 	// If parent exsts, add quitting child to their quit list, remove the quitting child from their child list, and unblock them if need be
 	if (Current->parentPtr != NULL){
@@ -476,68 +487,74 @@ void quit(int status)
 	 ----------------------------------------------------------------------- */
 void dispatcher(void)
 {
-		//check that sentinel exists
-		if (ReadyLists[SENTINELPRIORITY - 1] == NULL){
-			USLOSS_Console("dispatcher(): Sentinel does not exist in ready list\n");
-			USLOSS_Halt(1);
+	disableInterrupts();
+
+	// test if in kernel mode; halt if in user mode 
+	if ( !isInKernelMode() ) {
+		USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
+		USLOSS_Halt(1);
+	}
+
+	//check that sentinel exists
+	if (ReadyLists[SENTINELPRIORITY - 1] == NULL){
+		USLOSS_Console("dispatcher(): Sentinel does not exist in ready list\n");
+		USLOSS_Halt(1);
+	}
+
+	procPtr nextProcess = NULL;
+	procPtr temp = NULL;
+	int i;
+	for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
+		temp = ReadyLists[i];
+		// USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
+		while (temp != NULL && temp->status != READY){
+			//int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
+			// USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
+			temp = temp->nextProcPtr;
 		}
-		disableInterrupts();
-
-		procPtr nextProcess = NULL;
-		procPtr temp = NULL;
-		int i;
-		for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
-			temp = ReadyLists[i];
-			// USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
-			while (temp != NULL && temp->status != READY){
-				//int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
-				// USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
-				temp = temp->nextProcPtr;
-			}
-			
-
-			// if (temp != NULL){
-			// 	int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
-			// 	USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
-			// } else {
-			// 	USLOSS_Console("null\n");
-			// }
-
-			if (temp != NULL){
-				nextProcess = temp;
-				// USLOSS_Console("------------------------------------\n");		
-				break;
-			}
-
-			// USLOSS_Console("------------------------------------\n");		
-	
-		}
-
-		if (DEBUG && debugflag)
-			USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", temp->name, temp->pid, i+1);
-
-
-
-		if (Current == NULL){ //possibly
-			p1_switch(-1, nextProcess->pid);
-		} else {
-			p1_switch(Current->pid, nextProcess->pid);
-		}
-
-		//get old and new contexts
-		USLOSS_Context * oldContext = Current == NULL ? NULL : &Current->state;
-		USLOSS_Context * newContext = &nextProcess->state;
-
-		//ReadyLists[i] = ReadyLists[i]->nextProcPtr; // pop the ready list
 		
-		//reset current
-		Current = nextProcess;
 
-		//call to context switch
-		USLOSS_ContextSwitch(oldContext, newContext);
+		// if (temp != NULL){
+		// 	int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
+		// 	USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
+		// } else {
+		// 	USLOSS_Console("null\n");
+		// }
 
-		enableInterrupts();
+		if (temp != NULL){
+			nextProcess = temp;
+			// USLOSS_Console("------------------------------------\n");		
+			break;
+		}
 
+		// USLOSS_Console("------------------------------------\n");		
+
+	}
+
+	if (DEBUG && debugflag)
+		USLOSS_Console("dispatcher(): found process %s (pid %d) at priority %d\n", temp->name, temp->pid, i+1);
+
+
+
+	if (Current == NULL){ //possibly
+		p1_switch(-1, nextProcess->pid);
+	} else {
+		p1_switch(Current->pid, nextProcess->pid);
+	}
+
+	//get old and new contexts
+	USLOSS_Context * oldContext = Current == NULL ? NULL : &Current->state;
+	USLOSS_Context * newContext = &nextProcess->state;
+
+	//ReadyLists[i] = ReadyLists[i]->nextProcPtr; // pop the ready list
+	
+	//reset current
+	Current = nextProcess;
+
+	enableInterrupts();
+
+	//call to context switch
+	USLOSS_ContextSwitch(oldContext, newContext);
 
 } /* dispatcher */
 
@@ -570,21 +587,30 @@ int sentinel (char *dummy)
 static void checkDeadlock()
 {
 	int i;
+	int blocked = 0;
 	for( i = 0; i < MINPRIORITY; i++){ //loop through each priority
 		procPtr temp = ReadyLists[i];
 		if (temp != NULL) {
 			procPtr proc = ReadyLists[i];
 			while (proc != NULL) {
-				if (proc->status == READY || proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED ) {
-					fprintf(stderr, "checkDeadlock(): found another process (name: %s, pid: %d) on the ready list.\n", proc->name, proc->pid);
+				if (proc->status == READY) {
+					fprintf(stderr, "checkDeadlock(): found another process (name: %s, pid: %d, status: %d) on the ready list.\n", proc->name, proc->pid, proc->status);
 					USLOSS_Halt(1);
+				}
+				if (proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED) {
+					blocked = 1;
 				}
 				proc = proc->nextProcPtr;
 			}
 		}
 	}
 
-	USLOSS_Console("All processes completed.\n");
+	if (blocked) {
+		USLOSS_Console("checkDeadlock(): numProc = %d. Only Sentinel should be left. Halting...\n", countProcesses());
+	}
+	else {
+		USLOSS_Console("All processes completed.\n");
+	}
 	USLOSS_Halt(0);
 
 } /* checkDeadlock */
@@ -775,7 +801,7 @@ void dumpProcesses() {
 	USLOSS_Console(" SLOT   PID       NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN  NUM LIVE KIDS  NUM JOINS   TIME USED \n");
 	USLOSS_Console("------ ----- -------------- ----------- ---------- ------------ -------------- ------------- ----------- -----------\n");
 	for (int i = 0; i < MAXPROC; i++){
-		if (1){
+		if (1){ // FIXME: Why?
 			procPtr temp = &ProcTable[i];
 			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
 
@@ -813,6 +839,8 @@ int zap(int pid) {
 	}
 
 	Current->status = ZAPBLOCKED;
+
+	dispatcher();
 
 	if (isZapped()) {
 		return -1;
@@ -853,6 +881,16 @@ int readtime(void) {
 	return -1000;
 }
 
-void clockHandler(int dev, int unit){
+void clockHandler(int dev, void *arg) {
 	return;
+}
+
+int countProcesses() {
+	int count = 0;
+	for (int i = 0; i < MAXPROC; i++) {
+		if (ProcTable[i].status != EMPTY && ProcTable[i].status != QUIT) {
+			count++;
+		}
+	}
+	return count;
 }
