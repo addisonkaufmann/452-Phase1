@@ -838,7 +838,7 @@ void dumpProcesses() {
 
 int zap(int pid) {
 	if (pid == Current->pid) {
-		fprintf(stderr, "zap(): Cannot zap yourself.\n");
+		fprintf(stderr, "zap(): process %d tried to zap itself.  Halting...\n", Current->pid);
 		USLOSS_Halt(1);
 	}
 
