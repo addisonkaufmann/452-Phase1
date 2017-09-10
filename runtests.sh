@@ -6,9 +6,12 @@ resultsdir="testResults/"
 myresultsdir="myResults/"
 fext=".txt"
 difftext="diff"
-maxtest=34
+maxtest=36
+diffdir="diffOutputs/"
 
 mkdir myResults &> /dev/null
+mkdir diffOutputs &> /dev/null
+
 
 count=0
 
@@ -26,6 +29,7 @@ do
    if [ $diffsize -gt 0 ]
    then
    		echo "FAILED"
+         diff $resultsdir$test$fext $myresultsdir$test$fname$fext &> $diffdir$test$difftext$fext
    else 
    		echo "SUCCEEDED"
    fi
