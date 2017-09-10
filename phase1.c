@@ -361,12 +361,6 @@ int join(int *status)
 	if (Current->quitList != NULL) { // child has already quit
 		if (DEBUG && debugflag)
 			USLOSS_Console("Join(): Child has already quit\n");
-		if (Current->quitList->zapped) { // child was zapped before the join was called
-			if (DEBUG && debugflag)
-				USLOSS_Console("Join(): Child was already zapped\n");
-			enableInterrupts();
-			return -1;
-		}
 	}
 	else { 
 		if (DEBUG && debugflag)
