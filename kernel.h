@@ -52,7 +52,8 @@ union psrValues {
 #define SENTINELPRIORITY (MINPRIORITY + 1)
 #define EMPTY 0
 #define READY 1
-#define JOINBLOCKED 2
-#define ZAPBLOCKED 3
-#define QUIT 4
+#define RUNNING 2
+#define JOINBLOCKED 3
+#define ZAPBLOCKED 4
+#define QUIT 5
 

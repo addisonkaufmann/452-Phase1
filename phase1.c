@@ -66,7 +66,7 @@ static procPtr ReadyLists[SENTINELPRIORITY]; //linked list (queue) for each prio
 procPtr Current = NULL;
 
 // the next pid to be assigned
-unsigned int nextPid = SENTINELPID;
+unsigned int nextPid = 0;
 
 
 /* -------------------------- Functions ----------------------------------- */
@@ -306,6 +306,8 @@ void launch()
 
 		// Enable interrupts
 		result = enableInterrupts();
+
+
 		if (result == -1) {
 			fprintf(stderr, "launch(): failed to enable interrupts.\n");
 		}
@@ -336,6 +338,11 @@ void launch()
 int join(int *status)
 {
 	disableInterrupts();
+
+	if ( !isInKernelMode() ) {
+		USLOSS_Console("join(): USLOSS in user mode. Halting...\n");
+		USLOSS_Halt(1);
+	}
 
 	if (Current->childProcPtr == NULL && Current->quitList == NULL) {
 		if (DEBUG && debugflag)
@@ -392,6 +399,11 @@ int join(int *status)
 void quit(int status)
 {
 	disableInterrupts();
+
+	if ( !isInKernelMode() ) {
+		USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
+		USLOSS_Halt(1);
+	}
 
 	procPtr temp = Current->childProcPtr;
 	while (temp != NULL) { // Report error if trying to terminate a process who still has running children
@@ -508,7 +520,7 @@ void dispatcher(void)
 	for( i = 0; i < SENTINELPRIORITY; i++){ //loop through each priority
 		temp = ReadyLists[i];
 		// USLOSS_Console("-----------PRIORITY %d---------------\n", i+1);
-		while (temp != NULL && temp->status != READY){
+		while (temp != NULL && temp->status != READY && temp->status != RUNNING){
 			//int nextProcPid = temp->nextProcPtr == NULL? -1 : temp->nextProcPtr->pid;
 			// USLOSS_Console("name = %s, pid = %d, status = %d, nextProcPid = %d\n", temp->name, temp->pid, temp->status, nextProcPid);
 			temp = temp->nextProcPtr;
@@ -551,6 +563,7 @@ void dispatcher(void)
 	
 	//reset current
 	Current = nextProcess;
+	Current->status = RUNNING;
 
 	enableInterrupts();
 
@@ -574,13 +587,20 @@ void dispatcher(void)
 
 int sentinel (char *dummy)
 {
-		if (DEBUG && debugflag)
-				USLOSS_Console("sentinel(): called\n");
-		while (1)
-		{
-				checkDeadlock();
-				USLOSS_WaitInt();
-		}
+
+	if (DEBUG && debugflag)
+			USLOSS_Console("sentinel(): called\n");
+
+	if ( !isInKernelMode() ) {
+		USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
+		USLOSS_Halt(1);
+	}
+
+	while (1)
+	{
+		checkDeadlock();
+		USLOSS_WaitInt();
+	}
 } /* sentinel */
 
 
@@ -588,19 +608,17 @@ int sentinel (char *dummy)
 static void checkDeadlock()
 {
 	int i;
-	int blocked = 0;
+	int blocked = 1;
 	for( i = 0; i < MINPRIORITY; i++){ //loop through each priority
 		procPtr temp = ReadyLists[i];
 		if (temp != NULL) {
 			procPtr proc = ReadyLists[i];
 			while (proc != NULL) {
-				if (proc->status == READY) {
+				if (proc->status == READY || proc->status == RUNNING) {
 					fprintf(stderr, "checkDeadlock(): found another process (name: %s, pid: %d, status: %d) on the ready list.\n", proc->name, proc->pid, proc->status);
 					USLOSS_Halt(1);
 				}
-				if (proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED) {
-					blocked = 1;
-				}
+				blocked = blocked && (proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED); //FIXME: maybe not 100% sure about this
 				proc = proc->nextProcPtr;
 			}
 		}
@@ -720,9 +738,9 @@ int isProcessTableFull(){
 */
 unsigned int getNextPid(){
 	// USLOSS_Console("---next pid = %d before loop--\n", nextPid);
-	while (ProcTable[(nextPid - 1) % MAXPROC].status != EMPTY){
+	do {
 		nextPid++;
-	}
+	} while (ProcTable[(nextPid - 1) % MAXPROC].status != EMPTY);
 	// USLOSS_Console("---next pid = %d after loop--\n", nextPid);
 
 	return nextPid;
@@ -795,6 +813,7 @@ void dumpProcesses() {
 	char * statuses[5];
 	statuses[EMPTY] = "EMPTY";
 	statuses[READY] = "READY";
+	statuses[RUNNING] = "RUNNING";
 	statuses[JOINBLOCKED] = "JOINBLOCKED";
 	statuses[ZAPBLOCKED] = "ZAPBLOCKED";
 	statuses[QUIT] = "QUIT";
