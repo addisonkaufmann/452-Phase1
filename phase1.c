@@ -361,6 +361,10 @@ int join(int *status)
 	if (Current->quitList != NULL) { // child has already quit
 		if (DEBUG && debugflag)
 			USLOSS_Console("Join(): Child has already quit\n");
+		if (isZapped()) {
+			enableInterrupts();
+			return -1;
+		}
 	}
 	else { 
 		if (DEBUG && debugflag)
@@ -368,7 +372,9 @@ int join(int *status)
 		Current->status = JOINBLOCKED;
 		enableInterrupts();
 		dispatcher();
+		disableInterrupts();
 		if (isZapped()) {
+			enableInterrupts();
 			return -1;  // if the process was zapped while waiting for a child to quit return -1;
 		}
 	}
