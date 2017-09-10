@@ -49,6 +49,7 @@ int countProcesses();
 void illegalInstructionHandler(int dev, void *arg);
 void timeSlice(void);
 int readCurStartTime(void);
+int onReadyList(int pid, int priority);
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -234,6 +235,7 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		ProcTable[procSlot].numLiveKids = 0;
 		ProcTable[procSlot].startTime = -1;
 		ProcTable[procSlot].totalTimeUsed = 0;
+
 
 
 		if ( arg == NULL ) {
@@ -637,7 +639,7 @@ static void checkDeadlock()
 					fprintf(stderr, "checkDeadlock(): found another process (name: %s, pid: %d, status: %d) on the ready list.\n", proc->name, proc->pid, proc->status);
 					USLOSS_Halt(1);
 				}
-				blocked = blocked && (proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED); //FIXME: maybe not 100% sure about this
+				blocked = blocked && (proc->status == JOINBLOCKED || proc->status == ZAPBLOCKED || proc->status > MEBLOCKED); //FIXME: maybe not 100% sure about this
 				proc = proc->nextProcPtr;
 			}
 		}
@@ -831,7 +833,7 @@ void cleanProcess(procPtr proc) {
 
 // its PID, parent’s PID, priority, process status (e.g. empty, running, ready, blocked, etc.), number of children, CPU time consumed, and na
 void dumpProcesses() {
-	char * statuses[5];
+	char * statuses[6];
 	statuses[EMPTY] = "EMPTY";
 	statuses[READY] = "READY";
 	statuses[RUNNING] = "RUNNING";
@@ -844,8 +846,10 @@ void dumpProcesses() {
 	for (int i = 0; i < MAXPROC; i++){
 			procPtr temp = &ProcTable[i];
 			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
-
-			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %13d %11d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, temp->numLiveKids, temp->numJoins, temp->totalTimeUsed);
+			if (temp->status > MEBLOCKED)
+				USLOSS_Console("%6d %5d %14s %11d %10d %12d %14d %13d %11d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, temp->status, temp->numKids, temp->numLiveKids, temp->numJoins, temp->totalTimeUsed);
+			else 
+				USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %13d %11d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, temp->numLiveKids, temp->numJoins, temp->totalTimeUsed);
 	}
 }
 
@@ -895,13 +899,80 @@ int getpid(void) {
 }
 
 int blockMe(int block_status) {
-	// TODO
-	return -1000;
+	if ( !isInKernelMode() ) {
+		USLOSS_Console("blockMe(): called while in user mode, by process %d. Halting...\n", Current->pid);
+		USLOSS_Halt(1);
+	}
+
+	disableInterrupts();
+
+	if (block_status <= MEBLOCKED){
+		USLOSS_Console("blockMe(): cannot block process with status (%d) <= 10. Halting...\n", block_status);
+		USLOSS_Halt(1);
+	}
+
+	Current->status = block_status;
+	dispatcher();
+	if (isZapped()){
+		enableInterrupts();
+		return -1;
+	}
+	enableInterrupts();
+	return 0;
 }
 
 int unblockProc(int pid) {
+	if ( !isInKernelMode() ) {
+		USLOSS_Console("unblockProc(): called while in user mode, by process %d. Halting...\n", Current->pid);
+		USLOSS_Halt(1);
+	}
+
+	disableInterrupts();
+
+	//returns -2 if proc is the current process, does not exist, not me-blocked, or blocked on status <= 10
+	if (pid == Current->pid){
+		if (DEBUG && debugflag)
+			USLOSS_Console("unblockProc(): attempting to unblock Current process (pid %d).\n", pid);
+		enableInterrupts();
+		return -2;
+	}
+
+	procPtr proc = &ProcTable[(pid - 1) % MAXPROC];
+	if (proc->status == EMPTY){
+		if (DEBUG && debugflag)
+			USLOSS_Console("unblockProc(): attempting to unblock non existant process (pid %d does not exist).\n", pid);
+		enableInterrupts();
+		return -2;
+	}
+
+	if (proc->status <= MEBLOCKED){
+		if (DEBUG && debugflag)
+			USLOSS_Console("unblockProc(): attempting to unblock process %d with status (%d) <= 10 (not meblocked)\n", pid, proc->status);
+		enableInterrupts();
+		return -2;
+	}
+
+	if (DEBUG && debugflag)
+		USLOSS_Console("unblockProc(): unblocking process %d.\n", pid);
+
+
+	proc->status = READY; //change status to ready
+
+	if (!onReadyList(pid, proc->priority)){ //add to readylist if not already there
+		if (DEBUG && debugflag)
+			USLOSS_Console("unblockProc(): process %d not found on ready list[%d], adding now.\n", pid, proc->priority);
+		addProcToReadyLists((pid - 1) % MAXPROC, proc->priority); //procSlot, priority
+	}
+
+	dispatcher();
+
+	if (isZapped()){
+		enableInterrupts();
+		return -1;
+	}
 	
-	return -1000;
+	enableInterrupts();
+	return 0;
 }
 
 
@@ -953,4 +1024,19 @@ int countProcesses() {
 		}
 	}
 	return count;
+}
+
+int onReadyList(int pid, int priority){
+	procPtr list = ReadyLists[priority-1];
+	if (list == NULL){
+		return 0;
+	}
+	procPtr temp = list;
+	while (temp != NULL){
+		if (temp->pid == pid){
+			return 1;
+		}
+		temp = temp->nextProcPtr;
+	}
+	return 0;
 }

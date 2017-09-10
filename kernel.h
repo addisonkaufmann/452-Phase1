@@ -58,4 +58,6 @@ union psrValues {
 #define JOINBLOCKED 3
 #define ZAPBLOCKED 4
 #define QUIT 5
+#define MEBLOCKED 10
+
 
