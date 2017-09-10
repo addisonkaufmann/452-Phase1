@@ -45,6 +45,7 @@ int   readCurStartTime(void);
 void  timeSlice(void);
 int   readtime(void);
 void  clockHandler(int dev, void * arg);
+int countProcesses();
 
 
 
