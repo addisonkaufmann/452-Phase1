@@ -802,14 +802,10 @@ void dumpProcesses() {
 	USLOSS_Console(" SLOT   PID       NAME       PARENTPID   PRIORITY     STATUS     NUM CHILDREN  NUM LIVE KIDS  NUM JOINS   TIME USED \n");
 	USLOSS_Console("------ ----- -------------- ----------- ---------- ------------ -------------- ------------- ----------- -----------\n");
 	for (int i = 0; i < MAXPROC; i++){
-		if (1){ // FIXME: Why?
 			procPtr temp = &ProcTable[i];
 			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
 
 			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %13d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, temp->numLiveKids, temp->numJoins, 0);
-
-		}
-
 	}
 }
 
