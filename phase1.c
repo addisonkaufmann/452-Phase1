@@ -46,6 +46,7 @@ void  timeSlice(void);
 int   readtime(void);
 void  clockHandler(int dev, void * arg);
 int countProcesses();
+void illegalInstructionHandler(int dev, void *arg);
 
 
 
@@ -82,6 +83,10 @@ void startup(int argc, char *argv[])
 {
 		int result; /* value returned by call to fork1() */
 
+		// Initialize the clock interrupt handler
+		USLOSS_IntVec[USLOSS_CLOCK_INT] = clockHandler;
+		USLOSS_IntVec[USLOSS_ILLEGAL_INT] = illegalInstructionHandler;
+
 		/* initialize the process table */
 		if (DEBUG && debugflag)
 				USLOSS_Console("startup(): initializing process table, ProcTable[]\n");
@@ -93,8 +98,7 @@ void startup(int argc, char *argv[])
 				USLOSS_Console("startup(): initializing the Ready list\n");
 		initReadyLists();
 
-		// Initialize the clock interrupt handler
-		USLOSS_IntVec[USLOSS_CLOCK_INT] = clockHandler;
+		
 
 		// startup a sentinel process
 		if (DEBUG && debugflag)
@@ -154,17 +158,18 @@ void finish(int argc, char *argv[])
 int fork1(char *name, int (*startFunc)(char *), char *arg,
 					int stacksize, int priority)
 {
+		// test if in kernel mode; halt if in user mode 
+		if ( !isInKernelMode() ) {
+			USLOSS_Console("fork1(): called while in user mode, by process %d. Halting...\n", getNextPid()-1);
+			USLOSS_Halt(1);
+		}
+
 		disableInterrupts();
 		int procSlot = -1;
 
 		if (DEBUG && debugflag)
 				USLOSS_Console("fork1(): creating process %s\n", name);
-
-		// test if in kernel mode; halt if in user mode 
-		if ( !isInKernelMode() ) {
-			USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
-			USLOSS_Halt(1);
-		}
+		
 
 		if (name == NULL || startFunc == NULL) {
 			fprintf(stderr, "fork1(): Name and/or start function cannot be null.\n");
@@ -337,12 +342,11 @@ void launch()
 	 ------------------------------------------------------------------------ */
 int join(int *status)
 {
-	disableInterrupts();
-
 	if ( !isInKernelMode() ) {
-		USLOSS_Console("join(): USLOSS in user mode. Halting...\n");
-		USLOSS_Halt(1);
-	}
+			USLOSS_Console("join(): called while in user mode, by process %d. Halting...\n", Current->pid);
+			USLOSS_Halt(1);
+		}
+	disableInterrupts();
 
 	if (Current->childProcPtr == NULL && Current->quitList == NULL) {
 		if (DEBUG && debugflag)
@@ -398,17 +402,16 @@ int join(int *status)
 	 ------------------------------------------------------------------------ */
 void quit(int status)
 {
-	disableInterrupts();
-
 	if ( !isInKernelMode() ) {
-		USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
+		USLOSS_Console("quit(): called while in user mode, by process %d. Halting...\n", Current->pid);
 		USLOSS_Halt(1);
 	}
+	disableInterrupts();
 
 	procPtr temp = Current->childProcPtr;
 	while (temp != NULL) { // Report error if trying to terminate a process who still has running children
 		if (temp->status != QUIT && temp->status != EMPTY) {
-			fprintf(stderr, "quit(): attempted to quit a process with active children.\n");
+			fprintf(stderr, "quit(): process %d, '%s', has active children. Halting...\n", Current->pid, Current->name);
 			USLOSS_Halt(1);
 		}
 		temp = temp->nextSiblingPtr;
@@ -500,13 +503,12 @@ void quit(int status)
 	 ----------------------------------------------------------------------- */
 void dispatcher(void)
 {
-	disableInterrupts();
-
 	// test if in kernel mode; halt if in user mode 
 	if ( !isInKernelMode() ) {
-		USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
+		USLOSS_Console("dispatcher(): called while in user mode, by process %d. Halting...\n", Current->pid);
 		USLOSS_Halt(1);
 	}
+	disableInterrupts();
 
 	//check that sentinel exists
 	if (ReadyLists[SENTINELPRIORITY - 1] == NULL){
@@ -592,7 +594,7 @@ int sentinel (char *dummy)
 			USLOSS_Console("sentinel(): called\n");
 
 	if ( !isInKernelMode() ) {
-		USLOSS_Console("fork1(): USLOSS in user mode. Halting...\n");
+		USLOSS_Console("sentinel(): called while in user mode, by process %d. Halting...\n", Current->pid);
 		USLOSS_Halt(1);
 	}
 
@@ -898,6 +900,10 @@ int readtime(void) {
 }
 
 void clockHandler(int dev, void *arg) {
+	return;
+}
+
+void illegalInstructionHandler(int dev, void *arg) {
 	return;
 }
 

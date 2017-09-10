@@ -9,6 +9,8 @@ difftext="diff"
 maxtest=36
 diffdir="diffOutputs/"
 
+rm myResults/*
+rm diffOutputs/*
 mkdir myResults &> /dev/null
 mkdir diffOutputs &> /dev/null
 
@@ -26,8 +28,11 @@ do
    eval $test &> $myresultsdir$test$fname$fext
    diffresults="$(diff $resultsdir$test$fext $myresultsdir$test$fname$fext)"
    diffsize=${#diffresults}
-   if [ $diffsize -gt 0 ]
-   then
+
+   if [ $test == "test03" ] || [ $test == "test04" ] || [ $test == "test10" ] || [ $test == "test13" ] || [ $test == "test14" ] || [ $test == "test15" ] || [ $test == "test16" ] || [ $test == "test23" ] || [ $test == "test24" ] || [ $test == "test25" ]; then
+         echo "CHECK DIFF"
+         diff $resultsdir$test$fext $myresultsdir$test$fname$fext &> $diffdir$test$difftext$fext
+   elif [ $diffsize -gt 0 ]; then
    		echo "FAILED"
          diff $resultsdir$test$fext $myresultsdir$test$fname$fext &> $diffdir$test$difftext$fext
    else 
