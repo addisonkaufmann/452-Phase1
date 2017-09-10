@@ -861,7 +861,7 @@ int zap(int pid) {
 
 	int procSlot = (pid - 1) % MAXPROC;
 	if (ProcTable[procSlot].status == EMPTY || ProcTable[procSlot].status == QUIT) {
-		fprintf(stderr, "zap(): Process to zap does not exist.\n");
+		fprintf(stderr, "zap(): process being zapped does not exist.  Halting...\n");
 		USLOSS_Halt(1);
 	}
 
