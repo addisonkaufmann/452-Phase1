@@ -47,7 +47,8 @@ int   readtime(void);
 void  clockHandler(int dev, void * arg);
 int countProcesses();
 void illegalInstructionHandler(int dev, void *arg);
-
+void timeSlice(void);
+int readCurStartTime(void);
 
 
 /* -------------------------- Globals ------------------------------------- */
@@ -179,27 +180,31 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 
 		// test if trying to apply sentinel priority to non-sentinel process
 		if (strcmp(name, "sentinel") != 0 && priority == SENTINELPRIORITY) {
-			fprintf(stderr, "fork1(): Cannot assign sentinel prority to process other than the sentinel. Halting...\n");
+			if (DEBUG && debugflag)
+				fprintf(stderr, "fork1(): Cannot assign sentinel prority to process other than the sentinel. Halting...\n");
 			USLOSS_Halt(1);
 		}
 
 		// check for priority out of range
 		if (priority > SENTINELPRIORITY || priority < MAXPRIORITY) {
-			fprintf(stderr, "fork1(): Priority out of range.\n");
+			if (DEBUG && debugflag)
+				fprintf(stderr, "fork1(): Priority out of range.\n");
 			enableInterrupts();
 			return -1;
 		}
 
 		// Return if stack size is too small
 		if ( stacksize < USLOSS_MIN_STACK ){
-			USLOSS_Console("fork1(): Requested Stack size too small.\n");
+			if (DEBUG && debugflag)
+				USLOSS_Console("fork1(): Requested Stack size too small.\n");
 			enableInterrupts();
 			return -2;
 		}
 
 		// Is there room in the process table? What is the next PID?
 		if (isProcessTableFull()){
-			USLOSS_Console("fork1(): Process Table is full.\n");
+			if (DEBUG && debugflag)
+				USLOSS_Console("fork1(): Process Table is full.\n");
 			enableInterrupts();
 			return -1;
 		}
@@ -227,6 +232,8 @@ int fork1(char *name, int (*startFunc)(char *), char *arg,
 		ProcTable[procSlot].numJoins = 0;
 		ProcTable[procSlot].numKids = 0;
 		ProcTable[procSlot].numLiveKids = 0;
+		ProcTable[procSlot].startTime = -1;
+		ProcTable[procSlot].totalTimeUsed = 0;
 
 
 		if ( arg == NULL ) {
@@ -567,11 +574,15 @@ void dispatcher(void)
 	USLOSS_Context * oldContext = Current == NULL ? NULL : &Current->state;
 	USLOSS_Context * newContext = &nextProcess->state;
 
-	//ReadyLists[i] = ReadyLists[i]->nextProcPtr; // pop the ready list
-	
+	if (Current != NULL){
+		Current->totalTimeUsed = Current->totalTimeUsed + (readtime() - Current->startTime);
+		Current->startTime = -1; //FIXME: maybe
+	}
+
 	//reset current
 	Current = nextProcess;
 	Current->status = RUNNING;
+	Current->startTime = readtime();
 
 	enableInterrupts();
 
@@ -814,6 +825,8 @@ void cleanProcess(procPtr proc) {
 	proc->zapped = 0;
 	proc->zapperList = NULL;
 	proc->zapperNext = NULL;
+	proc->startTime = -1;
+	proc->totalTimeUsed = 0;
 }
 
 // its PID, parent’s PID, priority, process status (e.g. empty, running, ready, blocked, etc.), number of children, CPU time consumed, and na
@@ -832,7 +845,7 @@ void dumpProcesses() {
 			procPtr temp = &ProcTable[i];
 			int parentpid = temp->parentPtr == NULL? -1 : temp->parentPtr->pid;
 
-			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %13d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, temp->numLiveKids, temp->numJoins, 0);
+			USLOSS_Console("%6d %5d %14s %11d %10d %12s %14d %13d %11d %11d\n", i, temp->pid, temp->name, parentpid, temp->priority, statuses[temp->status], temp->numKids, temp->numLiveKids, temp->numJoins, temp->totalTimeUsed);
 	}
 }
 
@@ -887,30 +900,49 @@ int blockMe(int block_status) {
 }
 
 int unblockProc(int pid) {
-	// TODO
+	
 	return -1000;
 }
 
-int readCurStartTime(void) {
-	// TODO
-	return -1000;
-}
-
-void timeSlice(void) {
-	// TODO
-}
 
 int readtime(void) {
-	// TODO
-	return -1000;
+	int status = 0;
+	int dev_status = USLOSS_DeviceInput(USLOSS_CLOCK_DEV, 0, &status);//
+
+	if (dev_status == USLOSS_DEV_OK) {
+		return status;
+	} else {
+		USLOSS_Console("Failed to read current time. Halting...\n");
+		USLOSS_Halt(1);
+		return -1; //so it compiles without warning
+	}
 }
 
 void clockHandler(int dev, void *arg) {
-	return;
+	if (DEBUG && debugflag)
+		USLOSS_Console("clockHandler(): clock interrupt occurred");
+	timeSlice();
 }
 
 void illegalInstructionHandler(int dev, void *arg) {
 	return;
+}
+
+void timeSlice(void){
+	int curTime = readtime();
+	int startTime = readCurStartTime();
+	if (curTime - startTime < 80000){
+		if (DEBUG && debugflag)
+			USLOSS_Console("timeSlice(): Process %d exceeded time slice with cpu time %d\n, calling dispatcher", Current->pid, curTime-startTime);
+		dispatcher();
+	} else {
+		if (DEBUG && debugflag)
+			USLOSS_Console("timeSlice(): Process %d did not exceed with cpu time %d\n", Current->pid, curTime-startTime);
+	}
+}
+
+int readCurStartTime(void){
+	return Current == NULL ? -1 : Current->startTime;
 }
 
 int countProcesses() {

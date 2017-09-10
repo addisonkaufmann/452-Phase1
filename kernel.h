@@ -28,6 +28,8 @@ struct procStruct {
    procPtr         zapperList;
    procPtr         zapperNext;
    int             numLiveKids;
+   int             startTime;
+   int             totalTimeUsed;
    /* other fields as needed... */
 };
 
